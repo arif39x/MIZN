@@ -1,0 +1,13 @@
+[package]
+name = "mizn-common"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+std = ["rkyv/std", "rkyv/alloc"]
+user-space = ["procfs"]
+
+[dependencies]
+procfs = { version = "0.16", optional = true }
+rkyv = { version = "0.7.42", default-features = false, features = ["size_32"] }

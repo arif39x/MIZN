@@ -1,13 +1,20 @@
-[package]
-name = "sirr"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members = [
+    "mizn-common",
+    "miznd",
+    "mizn-ui",
+]
+exclude = ["mizn-ebpf"]
+resolver = "2"
 
-[dependencies]
-crossterm = "0.29.0"
-etherparse = "0.19.0"
-parking_lot = "0.12.5"
-pcap = "2.4.0"
-procfs = "0.18.0"
-ratatui = "0.30.0"
-tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros", "sync", "time"] }
+[profile.dev]
+opt-level = 3
+debug = false
+panic = "abort"
+lto = true
+
+[profile.release]
+opt-level = 3
+panic = "abort"
+lto = true
+codegen-units = 1

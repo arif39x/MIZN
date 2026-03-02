@@ -20,11 +20,14 @@ use ratatui::{
 use std::{io, sync::Arc, time::Duration};
 
 const MIZN_STATIC_BANNER_RODATA: &str = r#"
-
-▄█████  ██  █████▄   █████▄
-▀▀▀▄▄▄  ██  ██▄▄██▄  ██▄▄██▄
-█████▀  ██  ██   ██  ██   ██
-                          "#;
+░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+░  ░░░░  ░░        ░░        ░░   ░░░  ░
+▒   ▒▒   ▒▒▒▒▒  ▒▒▒▒▒▒▒▒▒▒  ▒▒▒    ▒▒  ▒
+▓        ▓▓▓▓▓  ▓▓▓▓▓▓▓▓  ▓▓▓▓▓  ▓  ▓  ▓
+█  █  █  █████  ██████  ███████  ██    █
+█  ████  ██        ██        ██  ███   █
+▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒
+                                                    "#;
 
 pub async fn run(global_telemetry_state: Arc<RwLock<State>>) -> Result<(), io::Error> {
     enable_raw_mode()?;
@@ -47,7 +50,7 @@ pub async fn run(global_telemetry_state: Arc<RwLock<State>>) -> Result<(), io::E
                 ])
                 .split(base_canvas);
 
-            let banner_widget = Paragraph::new(STATIC_BANNER_RODATA)
+            let banner_widget = Paragraph::new(MIZN_STATIC_BANNER_RODATA)
                 .style(Style::default().fg(Color::Rgb(255, 0, 85)).add_modifier(Modifier::BOLD))
                 .alignment(Alignment::Center);
             render_frame.render_widget(banner_widget, primary_vertical_partitions[0]);

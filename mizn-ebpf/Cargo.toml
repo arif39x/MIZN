@@ -1,0 +1,18 @@
+[package]
+name = "mizn-ebpf"
+version = "0.1.0"
+edition = "2024"
+resolver = "2"
+
+[dependencies]
+aya-ebpf = "0.1"
+mizn-common = { path = "../mizn-common", default-features = false }
+
+[profile.dev]
+panic = "abort"
+opt-level = 3
+debug = false
+
+[profile.release]
+panic = "abort"
+opt-level = 3

@@ -1,122 +1,157 @@
 use crate::ingestion::PacketInfo;
 use crate::resolver::SocketsMap;
 use parking_lot::RwLock;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
+use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Instant;
 
 #[derive(Debug)]
 pub struct ProcessMetrics {
-    pub pid: i32,
-    pub name: String,
-    pub bytes_sent: u64,
-    pub bytes_recv: u64,
-    pub current_rate_sent_bps: u64,
-    pub current_rate_recv_bps: u64,
-    pub current_sec_sent: u64,
-    pub current_sec_recv: u64,
-    pub last_remote_addr: String,
+    pub process_identifier: i32,
+    pub process_nomenclature: String,
+    pub cumulative_bytes_transmitted: u64,
+    pub cumulative_bytes_received: u64,
+    pub transmission_rate_bytes_per_second: u64,
+    pub reception_rate_bytes_per_second: u64,
+    pub temporal_transmission_accumulator: u64,
+    pub temporal_reception_accumulator: u64,
+    pub peak_throughput_bytes_per_second: u64,
+    pub last_resolved_remote_peer: Option<IpAddr>,
 }
 
 pub struct State {
-    pub process_metrics: HashMap<i32, ProcessMetrics>,
-    pub total_bytes_sent: u64,
-    pub total_bytes_recv: u64,
-    pub total_rate_sent_bps: u64,
-    pub total_rate_recv_bps: u64,
-    pub graph_sent: VecDeque<u64>,
-    pub graph_recv: VecDeque<u64>,
-    pub start_time: Instant,
+    pub active_process_telemetry: HashMap<i32, ProcessMetrics>,
+    pub aggregate_cumulative_bytes_transmitted: u64,
+    pub aggregate_cumulative_bytes_received: u64,
+    pub aggregate_transmission_rate_bytes_per_second: u64,
+    pub aggregate_reception_rate_bytes_per_second: u64,
+    pub global_peak_throughput_bytes_per_second: u64,
+    pub transmission_history_ring_buffer: [u64; 60],
+    pub reception_history_ring_buffer: [u64; 60],
+    pub history_ring_buffer_cursor: usize,
+    pub telemetry_initialization_timestamp: Instant,
 }
 
 impl State {
     pub fn new() -> Self {
-        let mut graph_sent = VecDeque::with_capacity(60);
-        let mut graph_recv = VecDeque::with_capacity(60);
-        for _ in 0..60 {
-            graph_sent.push_back(0);
-            graph_recv.push_back(0);
-        }
         Self {
-            process_metrics: HashMap::new(),
-            total_bytes_sent: 0,
-            total_bytes_recv: 0,
-            total_rate_sent_bps: 0,
-            total_rate_recv_bps: 0,
-            graph_sent,
-            graph_recv,
-            start_time: Instant::now(),
+            active_process_telemetry: HashMap::with_capacity(1024),
+            aggregate_cumulative_bytes_transmitted: 0,
+            aggregate_cumulative_bytes_received: 0,
+            aggregate_transmission_rate_bytes_per_second: 0,
+            aggregate_reception_rate_bytes_per_second: 0,
+            global_peak_throughput_bytes_per_second: 0,
+            transmission_history_ring_buffer: [0; 60],
+            reception_history_ring_buffer: [0; 60],
+            history_ring_buffer_cursor: 0,
+            telemetry_initialization_timestamp: Instant::now(),
         }
     }
 
     pub fn tick(&mut self) {
-        let mut total_s = 0;
-        let mut total_r = 0;
-        for pm in self.process_metrics.values_mut() {
-            pm.current_rate_sent_bps = pm.current_sec_sent;
-            pm.current_rate_recv_bps = pm.current_sec_recv;
-            total_s += pm.current_sec_sent;
-            total_r += pm.current_sec_recv;
-            pm.current_sec_sent = 0;
-            pm.current_sec_recv = 0;
+        let mut aggregate_temporal_transmitted = 0;
+        let mut aggregate_temporal_received = 0;
+
+        for process_metric_entry in self.active_process_telemetry.values_mut() {
+            process_metric_entry.transmission_rate_bytes_per_second =
+                process_metric_entry.temporal_transmission_accumulator;
+            process_metric_entry.reception_rate_bytes_per_second =
+                process_metric_entry.temporal_reception_accumulator;
+
+            let combined_throughput = process_metric_entry.temporal_transmission_accumulator
+                + process_metric_entry.temporal_reception_accumulator;
+
+            if combined_throughput > process_metric_entry.peak_throughput_bytes_per_second {
+                process_metric_entry.peak_throughput_bytes_per_second = combined_throughput;
+            }
+
+            aggregate_temporal_transmitted +=
+                process_metric_entry.temporal_transmission_accumulator;
+            aggregate_temporal_received += process_metric_entry.temporal_reception_accumulator;
+
+            process_metric_entry.temporal_transmission_accumulator = 0;
+            process_metric_entry.temporal_reception_accumulator = 0;
         }
-        self.total_rate_sent_bps = total_s;
-        self.total_rate_recv_bps = total_r;
-        
-        self.graph_sent.push_back(total_s);
-        self.graph_recv.push_back(total_r);
-        if self.graph_sent.len() > 60 {
-            self.graph_sent.pop_front();
+
+        self.aggregate_transmission_rate_bytes_per_second = aggregate_temporal_transmitted;
+        self.aggregate_reception_rate_bytes_per_second = aggregate_temporal_received;
+
+        let global_combined_throughput =
+            aggregate_temporal_transmitted + aggregate_temporal_received;
+        if global_combined_throughput > self.global_peak_throughput_bytes_per_second {
+            self.global_peak_throughput_bytes_per_second = global_combined_throughput;
         }
-        if self.graph_recv.len() > 60 {
-            self.graph_recv.pop_front();
-        }
+
+        self.transmission_history_ring_buffer[self.history_ring_buffer_cursor] =
+            aggregate_temporal_transmitted;
+        self.reception_history_ring_buffer[self.history_ring_buffer_cursor] =
+            aggregate_temporal_received;
+
+        self.history_ring_buffer_cursor = (self.history_ring_buffer_cursor + 1) % 60;
     }
 }
 
 pub fn process_packet(
-    shared_state: &Arc<RwLock<State>>,
-    sockets_map: &Arc<RwLock<SocketsMap>>,
-    pkt: PacketInfo,
+    global_telemetry_state: &Arc<RwLock<State>>,
+    active_socket_registry: &Arc<RwLock<SocketsMap>>,
+    network_frame_telemetry: PacketInfo,
 ) {
-    let mut pid_name = None;
-    let mut sent = false;
+    let resolved_socket_identity = {
+        let locked_registry_view = active_socket_registry.read();
+        locked_registry_view
+            .get(&network_frame_telemetry.source_port)
+            .map(|socket_identity| (socket_identity.0, socket_identity.1.clone(), true))
+            .or_else(|| {
+                locked_registry_view
+                    .get(&network_frame_telemetry.destination_port)
+                    .map(|socket_identity| (socket_identity.0, socket_identity.1.clone(), false))
+            })
+    };
 
+    if let Some((process_identifier, process_nomenclature, is_transmission)) =
+        resolved_socket_identity
     {
-        let map = sockets_map.read();
-        if let Some(&(pid, ref name)) = map.get(&pkt.src_port) {
-            pid_name = Some((pid, name.clone()));
-            sent = true;
-        } else if let Some(&(pid, ref name)) = map.get(&pkt.dst_port) {
-            pid_name = Some((pid, name.clone()));
-            sent = false;
-        }
-    }
-
-    if let Some((pid, name)) = pid_name {
-        let mut state = shared_state.write();
-        let entry = state.process_metrics.entry(pid).or_insert_with(|| ProcessMetrics {
-            pid,
-            name,
-            bytes_sent: 0,
-            bytes_recv: 0,
-            current_rate_sent_bps: 0,
-            current_rate_recv_bps: 0,
-            current_sec_sent: 0,
-            current_sec_recv: 0,
-            last_remote_addr: String::new(),
-        });
-
-        if sent {
-            entry.bytes_sent += pkt.length;
-            entry.current_sec_sent += pkt.length;
-            entry.last_remote_addr = pkt.dst_ip.to_string();
-            state.total_bytes_sent += pkt.length;
+        let frame_payload_length = network_frame_telemetry.payload_length_bytes;
+        let remote_peer_identity = if is_transmission {
+            network_frame_telemetry.destination_ip
         } else {
-            entry.bytes_recv += pkt.length;
-            entry.current_sec_recv += pkt.length;
-            entry.last_remote_addr = pkt.src_ip.to_string();
-            state.total_bytes_recv += pkt.length;
+            network_frame_telemetry.source_ip
+        };
+
+        let mut locked_state_mutation_view = global_telemetry_state.write();
+
+        if is_transmission {
+            locked_state_mutation_view.aggregate_cumulative_bytes_transmitted +=
+                frame_payload_length;
+        } else {
+            locked_state_mutation_view.aggregate_cumulative_bytes_received += frame_payload_length;
         }
+
+        let process_telemetry_entry = locked_state_mutation_view
+            .active_process_telemetry
+            .entry(process_identifier)
+            .or_insert_with(|| ProcessMetrics {
+                process_identifier,
+                process_nomenclature,
+                cumulative_bytes_transmitted: 0,
+                cumulative_bytes_received: 0,
+                transmission_rate_bytes_per_second: 0,
+                reception_rate_bytes_per_second: 0,
+                temporal_transmission_accumulator: 0,
+                temporal_reception_accumulator: 0,
+                peak_throughput_bytes_per_second: 0,
+                last_resolved_remote_peer: None,
+            });
+
+        if is_transmission {
+            process_telemetry_entry.cumulative_bytes_transmitted += frame_payload_length;
+            process_telemetry_entry.temporal_transmission_accumulator += frame_payload_length;
+        } else {
+            process_telemetry_entry.cumulative_bytes_received += frame_payload_length;
+            process_telemetry_entry.temporal_reception_accumulator += frame_payload_length;
+        }
+
+        process_telemetry_entry.last_resolved_remote_peer = Some(remote_peer_identity);
     }
 }

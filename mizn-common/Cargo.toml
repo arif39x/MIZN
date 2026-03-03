@@ -3,11 +3,11 @@ name = "mizn-common"
 version = "0.1.0"
 edition = "2024"
 
+[dependencies]
+bytemuck = { version = "1.13.1", features = ["derive"] }
+rkyv = { version = "0.7.46", default-features = false, features = ["size_32"] }
+aya-obj = { version = "0.1.0", optional = true }
+
 [features]
 default = []
-std = ["rkyv/std", "rkyv/alloc"]
-user-space = ["procfs"]
-
-[dependencies]
-procfs = { version = "0.16", optional = true }
-rkyv = { version = "0.7.42", default-features = false, features = ["size_32"] }
+std = ["rkyv/std", "rkyv/alloc", "dep:aya-obj"]

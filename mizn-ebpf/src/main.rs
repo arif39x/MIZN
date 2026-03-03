@@ -20,46 +20,46 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 static FLOW_METRICS: HashMap<FlowKey, FlowMetrics> = HashMap::with_max_entries(10240, 0);
 
 #[repr(C)]
-struct EthHdr {
-    dst: [u8; 6],
-    src: [u8; 6],
+struct EthernetHeader {
+    destination: [u8; 6],
+    source: [u8; 6],
     ether_type: u16,
 }
 
 #[repr(C)]
-struct Ipv4Hdr {
-    ihl_version: u8,
+struct Ipv4Header {
+    version_ihl: u8,
     tos: u8,
-    tot_len: u16,
-    id: u16,
-    frag_off: u16,
+    total_length: u16,
+    identification: u16,
+    fragment_offset: u16,
     ttl: u8,
     protocol: u8,
-    check: u16,
-    saddr: u32,
-    daddr: u32,
+    checksum: u16,
+    source_address: u32,
+    destination_address: u32,
 }
 
 #[repr(C)]
-struct TcpHdr {
-    source: u16,
-    dest: u16,
-    seq: u32,
-    ack_seq: u32,
-    res1_doff: u8,
+struct TcpHeader {
+    source_port: u16,
+    destination_port: u16,
+    sequence_number: u32,
+    acknowledgment_number: u32,
+    data_offset_reserved: u8,
     flags: u8,
-    window: u16,
-    check: u16,
-    urg_ptr: u16,
+    window_size: u16,
+    checksum: u16,
+    urgent_pointer: u16,
 }
 
 #[inline(always)]
-unsafe fn ptr_at<T>(ctx: &XdpContext, offset: usize) -> Result<*const T, ()> {
+unsafe fn direct_ptr_at<T>(ctx: &XdpContext, offset: usize) -> Result<*const T, ()> {
     let start = ctx.data();
     let end = ctx.data_end();
-    let len = mem::size_of::<T>();
+    let length = mem::size_of::<T>();
 
-    if start + offset + len > end {
+    if start + offset + length > end {
         return Err(());
     }
 
@@ -68,70 +68,68 @@ unsafe fn ptr_at<T>(ctx: &XdpContext, offset: usize) -> Result<*const T, ()> {
 
 #[xdp]
 pub fn mizn_ebpf(ctx: XdpContext) -> u32 {
-    match try_mizn_ebpf(ctx) {
+    match process_packet(ctx) {
         Ok(action) => action,
         Err(_) => xdp_action::XDP_PASS,
     }
 }
 
 #[inline(always)]
-fn try_mizn_ebpf(ctx: XdpContext) -> Result<u32, ()> {
+fn process_packet(ctx: XdpContext) -> Result<u32, ()> {
     unsafe {
-        let eth_hdr: *const EthHdr = ptr_at(&ctx, 0)?;
-        if u16::from_be((*eth_hdr).ether_type) != 0x0800 {
+        let eth: *const EthernetHeader = direct_ptr_at(&ctx, 0)?;
+        if u16::from_be((*eth).ether_type) != 0x0800 {
             return Ok(xdp_action::XDP_PASS);
         }
 
-        let ipv4_hdr: *const Ipv4Hdr = ptr_at(&ctx, mem::size_of::<EthHdr>())?;
-        if (*ipv4_hdr).protocol != 6 {
+        let ip: *const Ipv4Header = direct_ptr_at(&ctx, mem::size_of::<EthernetHeader>())?;
+        if (*ip).protocol != 6 {
             return Ok(xdp_action::XDP_PASS);
         }
 
-        let ihl = ((*ipv4_hdr).ihl_version & 0x0F) as usize;
-        let ipv4_len = ihl << 2;
+        let ip_header_length = (((*ip).version_ihl & 0x0F) as usize) << 2;
+        let tcp_offset = mem::size_of::<EthernetHeader>() + ip_header_length;
+        let tcp: *const TcpHeader = direct_ptr_at(&ctx, tcp_offset)?;
 
-        let tcp_hdr_offset = mem::size_of::<EthHdr>() + ipv4_len;
-        let tcp_hdr: *const TcpHdr = ptr_at(&ctx, tcp_hdr_offset)?;
+        let tcp_header_length = (((*tcp).data_offset_reserved >> 4) as usize) << 2;
+        let payload_offset = tcp_offset + tcp_header_length;
+        let packet_length = (ctx.data_end() - ctx.data()) as u64;
 
-        let doff = ((*tcp_hdr).res1_doff >> 4) as usize;
-        let tcp_len = doff << 2;
-        let payload_offset = tcp_hdr_offset + tcp_len;
-
-        let packet_len = (ctx.data_end() - ctx.data()) as u64;
-
-        let key = FlowKey {
-            source_ip: (*ipv4_hdr).saddr,
-            destination_ip: (*ipv4_hdr).daddr,
-            source_port: u16::from_be((*tcp_hdr).source),
-            destination_port: u16::from_be((*tcp_hdr).dest),
+        let flow_key = FlowKey {
+            source_ip: (*ip).source_address,
+            destination_ip: (*ip).destination_address,
+            source_port: u16::from_be((*tcp).source_port),
+            destination_port: u16::from_be((*tcp).destination_port),
             protocol: 6,
-            _padding: [0; 3],
+            _alignment_padding: [0; 3],
         };
 
-        let metrics_ptr = FLOW_METRICS.get_ptr_mut(&key);
+        let metrics_ref = FLOW_METRICS.get_ptr_mut(&flow_key);
 
-        if let Some(metrics) = metrics_ptr {
-            (*metrics).bytes += packet_len;
+        if let Some(metrics) = metrics_ref {
+            (*metrics).bytes += packet_length;
             (*metrics).packets += 1;
-            (*metrics).tcp_flags |= (*tcp_hdr).flags;
+            (*metrics).tcp_flags |= (*tcp).flags;
 
-            if u16::from_be((*tcp_hdr).dest) == 443 {
-                extract_sni(&ctx, payload_offset, metrics);
+            if u16::from_be((*tcp).destination_port) == 443 {
+                parse_tls_sni(&ctx, payload_offset, metrics);
             }
         } else {
-            let mut new_metrics = FlowMetrics {
-                bytes: packet_len,
+            let mut fresh_metrics = FlowMetrics {
+                bytes: packet_length,
                 packets: 1,
-                tcp_flags: (*tcp_hdr).flags,
-                _padding: [0; 7],
+                tcp_flags: (*tcp).flags,
+                _explicit_padding_0: 0,
+                _explicit_padding_1: 0,
+                _explicit_padding_2: 0,
                 sni: [0; 64],
             };
 
-            if u16::from_be((*tcp_hdr).dest) == 443 {
-                extract_sni(&ctx, payload_offset, &mut new_metrics as *mut _);
+            if u16::from_be((*tcp).destination_port) == 443 {
+                parse_tls_sni(&ctx, payload_offset, &mut fresh_metrics);
             }
 
-            let _ = FLOW_METRICS.insert(&key, &new_metrics, 0);
+            let _ = FLOW_METRICS.insert(&flow_key, &fresh_metrics, 0);
         }
 
         Ok(xdp_action::XDP_PASS)
@@ -139,23 +137,17 @@ fn try_mizn_ebpf(ctx: XdpContext) -> Result<u32, ()> {
 }
 
 #[inline(always)]
-unsafe fn extract_sni(ctx: &XdpContext, offset: usize, metrics: *mut FlowMetrics) {
+unsafe fn parse_tls_sni(ctx: &XdpContext, offset: usize, metrics: *mut FlowMetrics) {
     unsafe {
-        if let Ok(tls_type_ptr) = ptr_at::<u8>(ctx, offset) {
-            if *tls_type_ptr == 0x16 {
-                let mut i = 0;
-                while i < 16 {
-                    if let Ok(c_ptr) = ptr_at::<u8>(ctx, offset + 5 + i) {
-                        let c = *c_ptr;
-                        if c >= 32 && c <= 126 {
-                            (*metrics).sni[i] = c;
-                        } else {
-                            break;
-                        }
-                    } else {
-                        break;
+        if let Ok(tls_type) = direct_ptr_at::<u8>(ctx, offset) {
+            if *tls_type == 0x16 {
+                let sni_start_offset = offset + 5;
+                for j in 0..16 {
+                    if let Ok(byte_ptr) = direct_ptr_at::<u8>(ctx, sni_start_offset + j) {
+                        let val = *byte_ptr;
+                        let is_printable = (val.wrapping_sub(32) < 95) as u8;
+                        (*metrics).sni[j] = val * is_printable;
                     }
-                    i += 1;
                 }
             }
         }

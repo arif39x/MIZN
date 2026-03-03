@@ -4,11 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-aya = { version = "*", features = ["async_tokio"] }
+aya = { version = "0.13.1", features = ["async_tokio"] }
+aya-log = "0.2.1"
 tokio = { version = "1.41.0", features = ["full"] }
-rkyv = "0.7.42"
+rkyv = { version = "0.7.46", features = ["validation", "alloc"] }
 maxminddb = { version = "0.24.0", features = ["mmap"] }
 memmap2 = "0.9.5"
 parking_lot = "0.12.3"
 procfs = "0.16.0"
-mizn-common = { path = "../mizn-common" }
+mizn-common = { path = "../mizn-common", features = ["std"] }
+bytemuck = { version = "1.13.1", features = ["derive"] }
+anyhow = "1.0"

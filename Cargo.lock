@@ -645,6 +645,7 @@ dependencies = [
 name = "mizn-common"
 version = "0.1.0"
 dependencies = [
+ "aya",
  "aya-obj 0.1.0",
  "bytemuck",
  "rkyv",

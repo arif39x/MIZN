@@ -3,6 +3,7 @@ members = [
     "mizn-common",
     "miznd",
     "mizn-ui",
+    "xtask",
 ]
 exclude = ["mizn-ebpf"]
 resolver = "2"

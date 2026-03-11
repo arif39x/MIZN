@@ -20,14 +20,10 @@ use ratatui::{
 use std::{io, sync::Arc, time::Duration};
 
 const MIZN_STATIC_BANNER_RODATA: &str = r#"
-░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-░  ░░░░  ░░        ░░        ░░   ░░░  ░
-▒   ▒▒   ▒▒▒▒▒  ▒▒▒▒▒▒▒▒▒▒  ▒▒▒    ▒▒  ▒
-▓        ▓▓▓▓▓  ▓▓▓▓▓▓▓▓  ▓▓▓▓▓  ▓  ▓  ▓
-█  █  █  █████  ██████  ███████  ██    █
-█  ████  ██        ██        ██  ███   █
-▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒
-                                                    "#;
+░█▄█░▀█▀░▀▀█░█▀█
+░█░█░░█░░▄▀░░█░█
+░▀░▀░▀▀▀░▀▀▀░▀░▀
+"#;
 
 pub async fn run(global_telemetry_state: Arc<RwLock<State>>) -> Result<(), io::Error> {
     enable_raw_mode()?;
@@ -51,7 +47,7 @@ pub async fn run(global_telemetry_state: Arc<RwLock<State>>) -> Result<(), io::E
                 .split(base_canvas);
 
             let banner_widget = Paragraph::new(MIZN_STATIC_BANNER_RODATA)
-                .style(Style::default().fg(Color::Rgb(255, 0, 85)).add_modifier(Modifier::BOLD))
+                .style(Style::default().fg(Color::Rgb(200, 0, 0)).add_modifier(Modifier::BOLD))
                 .alignment(Alignment::Center);
             render_frame.render_widget(banner_widget, primary_vertical_partitions[0]);
 
@@ -75,8 +71,8 @@ pub async fn run(global_telemetry_state: Arc<RwLock<State>>) -> Result<(), io::E
                 Block::default()
                     .borders(Borders::ALL)
                     .border_type(BorderType::Thick)
-                    .border_style(Style::default().fg(Color::Rgb(0, 255, 255))),
-            ).style(Style::default().fg(Color::Rgb(255, 255, 255)).add_modifier(Modifier::BOLD));
+                    .border_style(Style::default().fg(Color::Rgb(180, 0, 0))),
+            ).style(Style::default().fg(Color::Rgb(255, 80, 80)).add_modifier(Modifier::BOLD));
             render_frame.render_widget(header_widget, primary_vertical_partitions[1]);
 
             let core_dashboard_partitions = Layout::default()
@@ -96,11 +92,11 @@ pub async fn run(global_telemetry_state: Arc<RwLock<State>>) -> Result<(), io::E
                 let combined_temporal_throughput = process_metric.transmission_rate_bytes_per_second + process_metric.reception_rate_bytes_per_second;
 
                 let dynamic_intensity_style = if combined_temporal_throughput > 10_485_760 {
-                    Style::default().fg(Color::Rgb(255, 0, 85)).add_modifier(Modifier::BOLD)
+                    Style::default().fg(Color::Rgb(255, 30, 30)).add_modifier(Modifier::BOLD | Modifier::RAPID_BLINK)
                 } else if combined_temporal_throughput > 1_048_576 {
-                    Style::default().fg(Color::Rgb(255, 215, 0))
+                    Style::default().fg(Color::Rgb(220, 80, 0))
                 } else {
-                    Style::default().fg(Color::Rgb(0, 255, 128))
+                    Style::default().fg(Color::Rgb(140, 0, 0))
                 };
 
                 let remote_peer_string = match process_metric.last_resolved_remote_peer {
@@ -109,11 +105,11 @@ pub async fn run(global_telemetry_state: Arc<RwLock<State>>) -> Result<(), io::E
                 };
 
                 process_table_rows.push(Row::new(vec![
-                    Cell::from(process_metric.process_identifier.to_string()).style(Style::default().fg(Color::DarkGray)),
-                    Cell::from(process_metric.process_nomenclature.clone()).style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                    Cell::from(format_bytes(process_metric.reception_rate_bytes_per_second)).style(Style::default().fg(Color::Rgb(0, 191, 255))),
-                    Cell::from(format_bytes(process_metric.transmission_rate_bytes_per_second)).style(Style::default().fg(Color::Rgb(255, 0, 255))),
-                    Cell::from(remote_peer_string).style(Style::default().fg(Color::Rgb(150, 150, 150))),
+                    Cell::from(process_metric.process_identifier.to_string()).style(Style::default().fg(Color::Rgb(80, 0, 0))),
+                    Cell::from(process_metric.process_nomenclature.clone()).style(Style::default().fg(Color::Rgb(255, 120, 120)).add_modifier(Modifier::BOLD)),
+                    Cell::from(format_bytes(process_metric.reception_rate_bytes_per_second)).style(Style::default().fg(Color::Rgb(220, 50, 50))),
+                    Cell::from(format_bytes(process_metric.transmission_rate_bytes_per_second)).style(Style::default().fg(Color::Rgb(180, 0, 0))),
+                    Cell::from(remote_peer_string).style(Style::default().fg(Color::Rgb(100, 30, 30))),
                     Cell::from(format_bytes(combined_temporal_throughput)).style(dynamic_intensity_style),
                 ]));
             }
@@ -131,9 +127,9 @@ pub async fn run(global_telemetry_state: Arc<RwLock<State>>) -> Result<(), io::E
             )
             .header(
                 Row::new(vec!["PID", "BINARY", "INBOUND", "OUTBOUND", "TARGET_NODE", "BANDWIDTH"])
-                    .style(Style::default().fg(Color::Rgb(0, 255, 255)).add_modifier(Modifier::BOLD))
+                    .style(Style::default().fg(Color::Rgb(255, 60, 60)).add_modifier(Modifier::BOLD))
             )
-            .block(Block::default().title(" LIVE SOCKET TOPOLOGY ").borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::DarkGray)))
+            .block(Block::default().title(" LIVE SOCKET TOPOLOGY ").borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::Rgb(120, 0, 0))))
             .column_spacing(2);
 
             render_frame.render_widget(connection_topology_table, core_dashboard_partitions[0]);
@@ -165,25 +161,25 @@ pub async fn run(global_telemetry_state: Arc<RwLock<State>>) -> Result<(), io::E
                     .name("INBOUND (RX)")
                     .marker(symbols::Marker::Braille)
                     .graph_type(GraphType::Line)
-                    .style(Style::default().fg(Color::Rgb(0, 191, 255)))
+                    .style(Style::default().fg(Color::Rgb(255, 80, 80)))
                     .data(&inbound_temporal_series),
                 Dataset::default()
                     .name("OUTBOUND (TX)")
                     .marker(symbols::Marker::Braille)
                     .graph_type(GraphType::Line)
-                    .style(Style::default().fg(Color::Rgb(255, 0, 255)))
+                    .style(Style::default().fg(Color::Rgb(160, 0, 0)))
                     .data(&outbound_temporal_series),
             ];
 
             let upper_y_bound = if absolute_maximum_throughput < 1024.0 { 1024.0 } else { absolute_maximum_throughput * 1.2 };
 
             let macroscopic_throughput_chart = Chart::new(bandwidth_datasets)
-                .block(Block::default().title(" MACROSCOPIC THROUGHPUT ").borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::DarkGray)))
-                .x_axis(Axis::default().style(Style::default().fg(Color::DarkGray)).bounds([0.0, 59.0]))
-                .y_axis(Axis::default().style(Style::default().fg(Color::DarkGray)).bounds([0.0, upper_y_bound]).labels(vec![
+                .block(Block::default().title(" MACROSCOPIC THROUGHPUT ").borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::Rgb(120, 0, 0))))
+                .x_axis(Axis::default().style(Style::default().fg(Color::Rgb(80, 0, 0))).bounds([0.0, 59.0]))
+                .y_axis(Axis::default().style(Style::default().fg(Color::Rgb(80, 0, 0))).bounds([0.0, upper_y_bound]).labels(vec![
                     Span::raw("0 B"),
                     Span::raw(format_bytes(upper_y_bound as u64 / 2)),
-                    Span::styled(format_bytes(upper_y_bound as u64), Style::default().fg(Color::Rgb(255, 85, 85)).add_modifier(Modifier::BOLD)),
+                    Span::styled(format_bytes(upper_y_bound as u64), Style::default().fg(Color::Rgb(255, 60, 60)).add_modifier(Modifier::BOLD)),
                 ]));
 
             render_frame.render_widget(macroscopic_throughput_chart, analytics_partitions[0]);
@@ -199,19 +195,19 @@ pub async fn run(global_telemetry_state: Arc<RwLock<State>>) -> Result<(), io::E
             }
 
             let resource_distribution_barchart = BarChart::default()
-                .block(Block::default().title(" THREAT & RESOURCE DISTRIBUTION ").borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::DarkGray)))
+                .block(Block::default().title(" THREAT & RESOURCE DISTRIBUTION ").borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::Rgb(120, 0, 0))))
                 .data(&distribution_data)
                 .bar_width(10)
                 .bar_gap(2)
-                .bar_style(Style::default().fg(Color::Rgb(0, 255, 128)))
-                .value_style(Style::default().fg(Color::Black).bg(Color::Rgb(0, 255, 128)).add_modifier(Modifier::BOLD));
+                .bar_style(Style::default().fg(Color::Rgb(180, 0, 0)))
+                .value_style(Style::default().fg(Color::Rgb(255, 200, 200)).bg(Color::Rgb(120, 0, 0)).add_modifier(Modifier::BOLD));
 
             render_frame.render_widget(resource_distribution_barchart, analytics_partitions[1]);
 
             let interface_footer = Paragraph::new(" [Q] TERMINATE LINK | [F] FREEZE FRAME | [S] SORT METRICS ")
                 .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL).border_type(BorderType::Thick).border_style(Style::default().fg(Color::Rgb(0, 255, 255))))
-                .style(Style::default().fg(Color::Black).bg(Color::Rgb(0, 255, 255)).add_modifier(Modifier::BOLD));
+                .block(Block::default().borders(Borders::ALL).border_type(BorderType::Thick).border_style(Style::default().fg(Color::Rgb(140, 0, 0))))
+                .style(Style::default().fg(Color::Rgb(200, 0, 0)).add_modifier(Modifier::BOLD));
 
             render_frame.render_widget(interface_footer, primary_vertical_partitions[3]);
         })?;

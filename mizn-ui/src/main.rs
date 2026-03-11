@@ -22,14 +22,10 @@ use ratatui::{
 use std::{io, time::Duration};
 
 const MIZN_STATIC_BANNER_RODATA: &str = r#"
-░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-░  ░░░░  ░░        ░░        ░░   ░░░  ░
-▒   ▒▒   ▒▒▒▒▒  ▒▒▒▒▒▒▒▒▒▒  ▒▒▒    ▒▒  ▒
-▓        ▓▓▓▓▓  ▓▓▓▓▓▓▓▓  ▓▓▓▓▓  ▓  ▓  ▓
-█  █  █  █████  ██████  ███████  ██    █
-█  ████  ██        ██        ██  ███   █
-▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒
-                                                    "#;
+░█▄█░▀█▀░▀▀█░█▀█
+░█░█░░█░░▄▀░░█░█
+░▀░▀░▀▀▀░▀▀▀░▀░▀
+"#;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -79,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .split(base_canvas);
 
             let banner_widget = Paragraph::new(MIZN_STATIC_BANNER_RODATA)
-                .style(Style::default().fg(Color::Rgb(255, 0, 85)).add_modifier(Modifier::BOLD))
+                .style(Style::default().fg(Color::Rgb(200, 0, 0)).add_modifier(Modifier::BOLD))
                 .alignment(Alignment::Center);
             render_frame.render_widget(banner_widget, primary_vertical_partitions[0]);
 
@@ -94,8 +90,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Block::default()
                     .borders(Borders::ALL)
                     .border_type(BorderType::Thick)
-                    .border_style(Style::default().fg(Color::Rgb(0, 255, 255))),
-            ).style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD));
+                    .border_style(Style::default().fg(Color::Rgb(180, 0, 0))),
+            ).style(Style::default().fg(Color::Rgb(255, 80, 80)).add_modifier(Modifier::BOLD));
             render_frame.render_widget(header_widget, primary_vertical_partitions[1]);
 
             let core_dashboard_partitions = Layout::default()
@@ -115,16 +111,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let combined_throughput = process_metric.transmission_rate_bytes_per_second + process_metric.reception_rate_bytes_per_second;
 
                 let dynamic_style = if combined_throughput > 10_485_760 {
-                    Style::default().fg(Color::Rgb(255, 0, 85)).add_modifier(Modifier::BOLD)
+                    Style::default().fg(Color::Rgb(255, 30, 30)).add_modifier(Modifier::BOLD | Modifier::RAPID_BLINK)
                 } else {
-                    Style::default().fg(Color::Rgb(0, 255, 128))
+                    Style::default().fg(Color::Rgb(160, 0, 0))
                 };
 
                 process_table_rows.push(Row::new(vec![
-                    Cell::from(process_metric.process_identifier.to_string()).style(Style::default().fg(Color::DarkGray)),
-                    Cell::from(process_metric.process_nomenclature.clone()).style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                    Cell::from(format_bytes(process_metric.reception_rate_bytes_per_second)).style(Style::default().fg(Color::Rgb(0, 191, 255))),
-                    Cell::from(format_bytes(process_metric.transmission_rate_bytes_per_second)).style(Style::default().fg(Color::Rgb(255, 0, 255))),
+                    Cell::from(process_metric.process_identifier.to_string()).style(Style::default().fg(Color::Rgb(80, 0, 0))),
+                    Cell::from(process_metric.process_nomenclature.clone()).style(Style::default().fg(Color::Rgb(255, 120, 120)).add_modifier(Modifier::BOLD)),
+                    Cell::from(format_bytes(process_metric.reception_rate_bytes_per_second)).style(Style::default().fg(Color::Rgb(220, 50, 50))),
+                    Cell::from(format_bytes(process_metric.transmission_rate_bytes_per_second)).style(Style::default().fg(Color::Rgb(180, 0, 0))),
                     Cell::from(format_bytes(combined_throughput)).style(dynamic_style),
                 ]));
             }
@@ -139,8 +135,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Constraint::Length(12),
                 ],
             )
-            .header(Row::new(vec!["PID", "BINARY", "RX", "TX", "BANDWIDTH"]).style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
-            .block(Block::default().title(" LIVE SOCKET TOPOLOGY ").borders(Borders::ALL).border_type(BorderType::Rounded))
+            .header(Row::new(vec!["PID", "BINARY", "RX", "TX", "BANDWIDTH"]).style(Style::default().fg(Color::Rgb(255, 60, 60)).add_modifier(Modifier::BOLD)))
+            .block(Block::default().title(" LIVE SOCKET TOPOLOGY ").borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::Rgb(120, 0, 0))))
             .column_spacing(2);
 
             render_frame.render_widget(connection_table, core_dashboard_partitions[0]);
@@ -161,18 +157,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let chart = Chart::new(vec![
-                Dataset::default().name("RX").marker(symbols::Marker::Braille).graph_type(GraphType::Line).style(Style::default().fg(Color::Rgb(0, 191, 255))).data(&rx_series),
-                Dataset::default().name("TX").marker(symbols::Marker::Braille).graph_type(GraphType::Line).style(Style::default().fg(Color::Rgb(255, 0, 255))).data(&tx_series),
+                Dataset::default().name("RX").marker(symbols::Marker::Braille).graph_type(GraphType::Line).style(Style::default().fg(Color::Rgb(255, 80, 80))).data(&rx_series),
+                Dataset::default().name("TX").marker(symbols::Marker::Braille).graph_type(GraphType::Line).style(Style::default().fg(Color::Rgb(160, 0, 0))).data(&tx_series),
             ])
-            .block(Block::default().title(" THROUGHPUT HISTORY ").borders(Borders::ALL).border_type(BorderType::Rounded))
-            .x_axis(Axis::default().bounds([0.0, 59.0]))
-            .y_axis(Axis::default().bounds([0.0, peak * 1.1]).labels(vec![Span::raw("0"), Span::raw(format_bytes(peak as u64))]));
+            .block(Block::default().title(" THROUGHPUT HISTORY ").borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::Rgb(120, 0, 0))))
+            .x_axis(Axis::default().style(Style::default().fg(Color::Rgb(80, 0, 0))).bounds([0.0, 59.0]))
+            .y_axis(Axis::default().style(Style::default().fg(Color::Rgb(80, 0, 0))).bounds([0.0, peak * 1.1]).labels(vec![Span::raw("0"), Span::styled(format_bytes(peak as u64), Style::default().fg(Color::Rgb(255, 60, 60)).add_modifier(Modifier::BOLD))]));
 
             render_frame.render_widget(chart, core_dashboard_partitions[1]);
 
             let footer = Paragraph::new(" [Q] EXIT | MIZN KERNEL AGENT ACTIVE ")
                 .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+                .style(Style::default().fg(Color::Rgb(200, 0, 0)).add_modifier(Modifier::BOLD))
+                .block(Block::default().borders(Borders::ALL).border_type(BorderType::Thick).border_style(Style::default().fg(Color::Rgb(140, 0, 0))));
             render_frame.render_widget(footer, primary_vertical_partitions[3]);
         })?;
 

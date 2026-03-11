@@ -24,9 +24,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "../../target/bpfel-unknown-none/release/mizn-ebpf"
     ))?;
 
+    let iface = std::env::var("MIZN_IFACE").unwrap_or_else(|_| detect_iface());
+    eprintln!("[miznd] Attaching XDP to interface: {iface}");
+
     let program: &mut Xdp = bpf.program_mut("mizn_ebpf").unwrap().try_into()?;
     program.load()?;
-    program.attach("eth0", XdpFlags::default())?;
+    program.attach(&iface, XdpFlags::default())?;
 
     let socket_registry = Arc::new(RwLock::new(resolver::SocketsMap::with_capacity(8192)));
     let registry_ptr = socket_registry.clone();
@@ -111,6 +114,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn resolve_flow<'a>(registry: &'a resolver::SocketsMap, key: &FlowKey) -> Option<(i32, String, bool)> {
     registry.get(&key.source_port).map(|s| (s.0, s.1.clone(), true))
         .or_else(|| registry.get(&key.destination_port).map(|s| (s.0, s.1.clone(), false)))
+}
+
+
+fn detect_iface() -> String {
+    let Ok(entries) = std::fs::read_dir("/sys/class/net") else {
+        return "wlan0".to_string();
+    };
+
+    let mut candidates: Vec<String> = entries
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .filter(|name| name != "lo")
+        .filter(|name| {
+            let state_path = format!("/sys/class/net/{}/operstate", name);
+            std::fs::read_to_string(&state_path)
+                .map(|s| s.trim() == "up")
+                .unwrap_or(false)
+        })
+        .collect();
+
+
+    candidates.sort_by_key(|n| {
+        if n.starts_with("en") || n.starts_with("eth") { 0u8 }
+        else if n.starts_with("wlan") || n.starts_with("wlp") { 1 }
+        else { 2 }
+    });
+
+    candidates.into_iter().next().unwrap_or_else(|| "wlan0".to_string())
 }
 
 async fn broadcast_telemetry(conns: &Arc<RwLock<Vec<tokio::net::UnixStream>>>, data: &[u8]) {

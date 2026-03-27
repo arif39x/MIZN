@@ -19,6 +19,9 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 #[map]
 static FLOW_METRICS: HashMap<FlowKey, FlowMetrics> = HashMap::with_max_entries(10240, 0);
 
+#[map]
+static BLOCKLIST: HashMap<u32, u8> = HashMap::with_max_entries(1024, 0);
+
 #[repr(C)]
 struct EthernetHeader {
     destination: [u8; 6],
@@ -53,6 +56,14 @@ struct TcpHeader {
     urgent_pointer: u16,
 }
 
+#[repr(C)]
+struct UdpHeader {
+    source_port: u16,
+    destination_port: u16,
+    length: u16,
+    checksum: u16,
+}
+
 #[inline(always)]
 unsafe fn ptr_at<T>(ctx: &XdpContext, offset: usize) -> Result<*const T, ()> {
     let start = ctx.data() as *const u8;
@@ -83,24 +94,46 @@ fn process_packet(ctx: XdpContext) -> Result<u32, ()> {
         }
 
         let ip: *const Ipv4Header = ptr_at(&ctx, mem::size_of::<EthernetHeader>())?;
-        if (*ip).protocol != 6 {
+        
+        if BLOCKLIST.get(&(*ip).source_address).is_some() {
+            return Ok(xdp_action::XDP_DROP);
+        }
+
+        let protocol = (*ip).protocol;
+        if protocol != 6 && protocol != 17 {
             return Ok(xdp_action::XDP_PASS);
         }
 
         let ip_header_length = (((*ip).version_ihl & 0x0F) as usize) << 2;
-        let tcp_offset = mem::size_of::<EthernetHeader>() + ip_header_length;
-        let tcp: *const TcpHeader = ptr_at(&ctx, tcp_offset)?;
+        let transport_offset = mem::size_of::<EthernetHeader>() + ip_header_length;
+        
+        let (src_port, dst_port, payload_offset, flags) = if protocol == 6 {
+            let tcp: *const TcpHeader = ptr_at(&ctx, transport_offset)?;
+            let tcp_header_length = (((*tcp).data_offset_reserved >> 4) as usize) << 2;
+            (
+                u16::from_be((*tcp).source_port),
+                u16::from_be((*tcp).destination_port),
+                transport_offset + tcp_header_length,
+                (*tcp).flags
+            )
+        } else {
+            let udp: *const UdpHeader = ptr_at(&ctx, transport_offset)?;
+            (
+                u16::from_be((*udp).source_port),
+                u16::from_be((*udp).destination_port),
+                transport_offset + 8,
+                0
+            )
+        };
 
-        let tcp_header_length = (((*tcp).data_offset_reserved >> 4) as usize) << 2;
-        let payload_offset = tcp_offset + tcp_header_length;
         let packet_length = (ctx.data_end() - ctx.data()) as u64;
 
         let flow_key = FlowKey {
             source_ip: (*ip).source_address,
             destination_ip: (*ip).destination_address,
-            source_port: u16::from_be((*tcp).source_port),
-            destination_port: u16::from_be((*tcp).destination_port),
-            protocol: 6,
+            source_port: src_port,
+            destination_port: dst_port,
+            protocol,
             _alignment_padding: [0; 3],
         };
 
@@ -109,23 +142,23 @@ fn process_packet(ctx: XdpContext) -> Result<u32, ()> {
         if let Some(metrics) = metrics_ref {
             (*metrics).bytes += packet_length;
             (*metrics).packets += 1;
-            (*metrics).tcp_flags |= (*tcp).flags;
+            (*metrics).tcp_flags |= flags;
 
-            if u16::from_be((*tcp).destination_port) == 443 {
+            if protocol == 6 && dst_port == 443 {
                 parse_tls_sni(&ctx, payload_offset, metrics);
             }
         } else {
             let mut fresh_metrics = FlowMetrics {
                 bytes: packet_length,
                 packets: 1,
-                tcp_flags: (*tcp).flags,
+                tcp_flags: flags,
                 _explicit_padding_0: 0,
                 _explicit_padding_1: 0,
                 _explicit_padding_2: 0,
                 sni: [0; 64],
             };
 
-            if u16::from_be((*tcp).destination_port) == 443 {
+            if protocol == 6 && dst_port == 443 {
                 parse_tls_sni(&ctx, payload_offset, &mut fresh_metrics);
             }
 

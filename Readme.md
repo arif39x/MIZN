@@ -9,12 +9,12 @@
 </p>
 
 <p align="center">
-  <b>real-time network monitor that lives inside your kernel.</b><br/>
-  <i>eBPF · XDP · TUI · Rust · Zero-Copy · SNI extraction</i>
+  <b>Real-time network monitor that lives inside your kernel.</b><br/>
+  <i>eBPF / XDP / Ratatui / Rust / Zero-Copy / SNI Extraction / XDP Firewall</i>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-alpha%20%F0%9F%94%A5-red?style=flat-square"/>
+  <img src="https://img.shields.io/badge/status-alpha-red?style=flat-square"/>
   <img src="https://img.shields.io/badge/lang-Rust-orange?style=flat-square&logo=rust"/>
   <img src="https://img.shields.io/badge/kernel-eBPF%20%2F%20XDP-critical?style=flat-square"/>
   <img src="https://img.shields.io/badge/platform-Linux%20only-informational?style=flat-square&logo=linux"/>
@@ -23,187 +23,231 @@
 
 ---
 
-## ok so what even is this
+## Overview
 
-honestly i dont fully know why im doing this.
-
-like.. i already have `nethogs`, i already have `iftop`, i already have like 14 other tools that do "network monitoring" but none of them felt right. they're all slow, heavy, ugly, or they just.. lie to me. I wanted something that tells me _exactly_ what's happening on my machine at the driver level. not after the kernel finishes playing with the packet. not after 3 layers of abstraction. **right now. at the wire.**
-
-so i built MIZN. its probably overkill. it definitely broke my system twice during development. I dont know why im doing this but here we are.
+MIZN is a kernel-level network monitoring tool built in Rust. It hooks into the Linux networking stack at the XDP (eXpress Data Path) layer — intercepting packets at the NIC driver before the kernel allocates memory for them. A userspace daemon reads the eBPF maps, resolves process ownership, and streams telemetry to a btop-style terminal dashboard over a Unix socket.
 
 ---
 
-## what it actually does
+## Features
+
+- **XDP-level packet interception** — captures traffic before the kernel networking stack processes it
+- **Per-process bandwidth tracking** — maps network flows to PIDs via `/proc/net/tcp` and `/proc/net/udp`
+- **TLS SNI extraction** — reads the plaintext Server Name Indication field from TLS Client Hello messages
+- **TCP and UDP flow tracking** — parses both Protocol 6 (TCP) and Protocol 17 (UDP)
+- **XDP Firewall / IPS** — dynamically blocks source IPs at the driver level using a BPF hash map and `XDP_DROP`
+- **TCP anomaly detection** — flags SYN-without-ACK patterns (port scans) and highlights them in the UI
+- **Local telemetry persistence** — writes historical flow logs (timestamp, PID, process, bytes, SNI) to a CSV file
+- **Process watchlist** — pins critical processes (sshd, nginx) to the top of the dashboard regardless of bandwidth
+- **Zero-copy data path** — kernel maps to daemon to TUI with no unnecessary allocations
+- **btop-style terminal dashboard** — Braille graphs, rounded borders, modular panels, live security alerts
+
+---
+
+## Dashboard Layout
 
 <p align="center">
   <img src="asset/MIZN_UI.png" alt="MIZN TUI Dashboard" width="700"/>
 </p>
 
-- **hooks into your kernel at XDP** — intercepts packets before linux even touches them
-- **shows you per-process bandwidth** — firefox eating 40 MB/s? you'll see it immediately
-- **extracts SNI from TLS handshakes** — even with encrypted traffic it can tell you _where_ a process is connecting to (by reading the plain-text SNI field in the TLS Client Hello)
-- **zero-copy everything** — kernel maps → daemon → TUI, no unnecessary data movement
-- **works in a terminal** — no electron, no browser, no java, just a blazing fast ratatui TUI
-
----
-
-## how its built
-
 ```
-┌─────────────────────────────────────────────────┐
-│                  Linux Kernel                   │
-│  ┌─────────────────────────────────────────┐    │
-│  │  mizn-ebpf  (eBPF/XDP program)          │    │
-│  │  hooks at network driver, reads packets │    │
-│  │  writes to BPF maps (FLOW_METRICS)      │    │
-│  └────────────────────┬────────────────────┘    │
-└───────────────────────┼─────────────────────────┘
-                        │ reads maps via aya
-              ┌─────────▼──────────┐
-              │       miznd        │
-              │  user-space daemon │
-              │  resolves PID/name │
-              │  via /proc/net/tcp │
-              │  streams over unix │
-              │  socket (rkyv)     │
-              └─────────┬──────────┘
-                        │ unix socket
-              ┌─────────▼──────────┐
-              │      mizn-ui       │
-              │  ratatui terminal  │
-              │  live charts/table │
-              └────────────────────┘
++-- RX/s --------+-- TX/s --------+-- PEAK --------+-- INTERFACE ---+
+|  1.2 MB/s       |  340 KB/s      |  8.4 MB/s      |  wlp3s0        |
++-----------------+----------------+----------------+----------------+
++-- THROUGHPUT 60s --------------------------------------------------+
+|  [Braille RX/TX line chart]                                        |
++--------------------------------------------------------------------+
++-- PROCESS & CONNECTION MONITOR -----------+-- ACTIVE ALERTS -------+
+|  PID  BINARY      RX/s  TX/s  SNI  FLAGS |  Port Scan: sshd       |
+|  ...  nginx       ...   ...   ...  ACK   +-- XDP FIREWALL --------+
+|  ...  curl        ...   ...   ...  SYN   |  1.2.3.4 (blocked)     |
++------------------------------------------+------------------------+
++-- [Q] Quit  [B] Block Top IP  MIZN kernel agent active ------------+
 ```
 
-### `mizn-ebpf`
+**Panels:**
 
-XDP program compiled for the BPF VM. sits at the NIC level and grabs packets before the kernel networking stack even thinks about allocating memory for them. parses ethernet → ip → tcp, builds flow keys, extracts SNI from TLS Client Hello.
-
-### `miznd`
-
-the daemon that does the boring but important stuff. reads the ebpf maps via `aya`, audits `/proc` to figure out which open sockets belong to which process, and streams serialized telemetry over a unix domain socket every second.
-
-### `mizn-ui`
-
-terminal UI built with `ratatui`. live bandwidth graph (60s history), per-process table sorted by throughput, bar chart showing traffic distribution. press `q` to quit.
+| Panel | Purpose |
+|-------|---------|
+| Header | Live RX/TX rates, peak throughput, active network interface |
+| Throughput Graph | 60-second Braille chart with dual RX/TX datasets |
+| Process Table | Per-process PID, binary name, RX, TX, total, SNI/destination, TCP flags |
+| Active Alerts | Scrolling list of detected anomalies (SYN scans, high bandwidth spikes) |
+| XDP Firewall | List of IPs currently blocked at the driver level |
 
 ---
 
-## WARNING ⚠️
+## Architecture
 
-**THIS IS ALPHA SOFTWARE. DO NOT RUN THIS ON A MACHINE YOU CARE ABOUT.**
+```
++--------------------------------------------------+
+|                  Linux Kernel                     |
+|  +--------------------------------------------+  |
+|  |  mizn-ebpf  (eBPF/XDP program)             |  |
+|  |  - hooks at NIC driver level                |  |
+|  |  - parses Ethernet > IP > TCP/UDP           |  |
+|  |  - writes to FLOW_METRICS map               |  |
+|  |  - enforces BLOCKLIST map (XDP_DROP)        |  |
+|  +---------------------+----------------------+  |
++-----------------------|--------------------------+
+                        | aya (reads BPF maps)
+              +---------v----------+
+              |       miznd        |
+              |  userspace daemon  |
+              |  - resolves PIDs   |
+              |  - writes CSV log  |
+              |  - manages blocklist|
+              +---------+----------+
+                        | /run/miznd.sock (telemetry)
+                        | /run/miznd_cmd.sock (commands)
+              +---------v----------+
+              |      mizn-ui       |
+              |  ratatui terminal  |
+              |  btop-style layout |
+              +--------------------+
+```
 
-this thing injects eBPF bytecode directly into your kernel's critical path. if something goes wrong the kernel panics and your system dies. ive had it happen. it's not fun. you've been warned.
+### mizn-ebpf
 
-- requires **root** (or `CAP_BPF` + `CAP_NET_ADMIN`)
-- **Linux only** (tested on kernel 5.15+)
-- wont work on WSL or VMs without proper NIC passthrough
-- XDP in `SKB` mode is used as fallback if native mode isn't supported
+XDP program compiled for the BPF VM using `cargo +nightly` with `build-std=core`. Runs at the NIC driver level. Parses Ethernet, IPv4, TCP, and UDP headers. Builds flow keys, extracts SNI from TLS Client Hello messages, and enforces the BLOCKLIST map by returning `XDP_DROP` for matched source IPs.
+
+### miznd
+
+Userspace daemon. Reads eBPF maps via the `aya` crate. Resolves socket-to-PID mappings by scanning `/proc/net/tcp` and `/proc/net/udp`. Writes historical flow logs to `miznd_flow_history.csv`. Manages a command socket (`/run/miznd_cmd.sock`) for dynamic IP blocking. Streams serialized telemetry snapshots (via `rkyv`) to the UI over `/run/miznd.sock` every second.
+
+### mizn-ui
+
+Terminal dashboard built with `ratatui`. Four-panel btop-style layout with a header stats row, 60-second Braille throughput chart, annotated process/connection table, and a live security panel showing active alerts and blocked IPs.
+
+### mizn-common
+
+Shared types used by both kernel and userspace: `FlowKey`, `FlowMetrics`, `IpcState`, `IpcProcessMetrics`, and `IpcCommand`.
 
 ---
 
-## getting started
+## Warning
 
-### prereqs
+**This is alpha software. Do not run this on a production machine.**
+
+This tool injects eBPF bytecode into the kernel's critical networking path. Incorrect behaviour can cause kernel panics and system crashes.
+
+Requirements:
+- Root privileges (or `CAP_BPF` + `CAP_NET_ADMIN`)
+- Linux only (tested on kernel 5.15+)
+- Will not work on WSL or VMs without NIC passthrough
+- Falls back to XDP SKB mode if native mode is not supported
+
+---
+
+## Getting Started
+
+### Prerequisites
 
 ```bash
-# you need the rust nightly toolchain + bpf target
+# Rust nightly toolchain with BPF target
 rustup install nightly
 rustup target add bpfel-unknown-none
+rustup component add rust-src --toolchain nightly
 
-# kernel headers + clang (for bpf compilation)
+# Kernel headers and clang
 sudo apt install linux-headers-$(uname -r) clang llvm libelf-dev
 
-# bpftool (optional but helpful for debugging)
+# Optional: bpftool for debugging
 sudo apt install linux-tools-$(uname -r)
 ```
 
-### clone it
+### Clone
 
 ```bash
 git clone https://github.com/arif39x/MIZN.git
 cd MIZN
 ```
 
-### build & run
+### Build and Run
 
 ```bash
-# builds ebpf binary first, then miznd + mizn-ui
 sudo ./run.sh
 ```
 
-thats it. the script handles everything — builds the eBPF object, sets capabilities, starts the daemon, waits for the socket, then launches the UI.
+The script builds the eBPF object and all userspace binaries, then starts the daemon and launches the dashboard.
 
-> **tip:** if you have multiple network interfaces or MIZN picks the wrong one you can force it:
->
-> ```bash
-> sudo MIZN_IFACE=eth0 ./run.sh
-> ```
+To force a specific network interface:
 
-### keybindings
+```bash
+sudo MIZN_IFACE=eth0 ./run.sh
+```
 
-| key         | action |
-| ----------- | ------ |
-| `q` / `Esc` | exit   |
+### Keybindings
+
+| Key | Action |
+|-----|--------|
+| `q` / `Esc` | Exit |
+| `b` | Block the top bandwidth-consuming IP via XDP |
 
 ---
 
-## project structure
+## Project Structure
 
 ```
 MIZN/
-├── mizn-ebpf/     # eBPF/XDP kernel program (Rust, no_std)
-├── miznd/         # user-space daemon
-├── mizn-ui/       # terminal UI client
-├── mizn-common/   # shared types (FlowKey, FlowMetrics, IPC structs)
-├── xtask/         # build orchestrator (builds ebpf before userspace)
-└── run.sh         # one shot run script
+├── mizn-ebpf/         # eBPF/XDP kernel program (Rust, no_std)
+│                        TCP + UDP parsing, SNI extraction, BLOCKLIST enforcement
+├── miznd/             # Userspace daemon
+│                        BPF map reader, PID resolver, CSV logger, IPS command socket
+├── mizn-ui/           # Terminal dashboard (ratatui)
+│                        Header, graph, process table, security panel
+├── mizn-common/       # Shared types
+│                        FlowKey, FlowMetrics, IpcState, IpcCommand
+├── xtask/             # Build orchestrator
+│                        Compiles eBPF before userspace
+├── asset/             # Logo and screenshots
+├── run.sh             # One-shot build and launch script
+└── .gitignore
 ```
 
 ---
 
-## wanna contribute?
+## Roadmap
 
-honestly if you're reading this and you know eBPF or Rust kernel stuff better than me (which is likely) please open an issue or a PR. i am figuring this out as i go.
+Prerequisites for deep learning integration:
 
-some things i actually need help with:
-
-- [ ] IPv6 support (currently only IPv4)
-- [ ] UDP flow tracking
-- [ ] proper SNI hostname string extraction beyond 16 bytes
-- [ ] persisting flow history to disk
-- [ ] packaging (nix flake? deb? idk)
-- [ ] making it not crash ur system
-
-**how to contribute:**
-
-1. fork the repo
-2. make your changes in a new branch (`git checkout -b feat/your-thing`)
-3. make sure it builds (`cargo xtask build`)
-4. open a pull request with a short description of what you changed and why
-5. i'll review it when i'm not debugging kernel panics
-
-if you find a bug please open an issue with:
-
-- your kernel version (`uname -r`)
-- your NIC type / driver
-- the full error output
+- [ ] Persistent time-series logging to SQLite or ClickHouse for ML training datasets
+- [ ] ICMP parsing and full IPv6 support
+- [ ] Layer 7 protocol dissectors (HTTP, DNS, SQL) for deep packet inspection
+- [ ] Headless alerting engine (webhooks, Slack, email)
+- [ ] On-demand PCAP recording for forensic analysis
 
 ---
 
-## contact
+## Contributing
+
+If you know eBPF or Rust kernel internals, issues and pull requests are welcome.
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feat/your-thing`)
+3. Verify the build (`cargo xtask build`)
+4. Open a pull request with a description of what changed and why
+
+When reporting bugs, include:
+- Kernel version (`uname -r`)
+- NIC type and driver
+- Full error output
+
+---
+
+## Contact
 
 **Sk Arif Ali**
 
 - GitHub: [@arif39x](https://github.com/arif39x)
-- Mail: [aliarif1168@gmail.com](mailto:aliarif1168@gmail.com)
+- Email: [aliarif1168@gmail.com](mailto:aliarif1168@gmail.com)
 
 ---
 
 <p align="center">
-  <sub>built with too much caffeine and a unhealthy obsession with kernel internals</sub>
+  <sub>Built with too much caffeine and an unhealthy obsession with kernel internals.</sub>
 </p>
 
 ---
 
-`#ebpf` `#xdp` `#rust` `#linux` `#network-monitor` `#kernel` `#tui` `#ratatui` `#zero-copy` `#aya` `#bpf` `#networking` `#terminal` `#sni` `#tls` `#systems-programming` `#low-level` `#performance` `#observability` `#linux-kernel`
+`#ebpf` `#xdp` `#rust` `#linux` `#network-monitor` `#kernel` `#tui` `#ratatui` `#zero-copy` `#aya` `#bpf` `#networking` `#terminal` `#sni` `#tls` `#systems-programming` `#low-level` `#performance` `#observability` `#linux-kernel` `#xdp-firewall` `#ips`

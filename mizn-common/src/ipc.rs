@@ -1,7 +1,12 @@
 use rkyv::{Archive, Deserialize, Serialize};
-use std::collections::HashMap; //
-use std::string::String; //
-use crate::bpf::FlowMetrics; //
+use std::collections::HashMap;
+use std::string::String;
+use crate::bpf::FlowMetrics;
+
+#[derive(Archive, Deserialize, Serialize, Debug, Clone)]
+pub enum IpcCommand {
+    BlockIp(u32),
+}
 
 #[derive(Archive, Deserialize, Serialize, Debug, Clone)]
 pub struct IpcState {
@@ -48,6 +53,7 @@ pub struct IpcProcessMetrics {
     pub last_resolved_remote_peer_ipv4: Option<u32>,
     pub tcp_flags: u8,
     pub sni: String,
+    pub cumulative_bytes_udp: u64,
 }
 
 impl IpcProcessMetrics {
@@ -65,6 +71,7 @@ impl IpcProcessMetrics {
             last_resolved_remote_peer_ipv4: None,
             tcp_flags: 0,
             sni: String::new(),
+            cumulative_bytes_udp: 0,
         }
     }
 

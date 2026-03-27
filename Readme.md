@@ -47,23 +47,8 @@ MIZN is a kernel-level network monitoring tool built in Rust. It hooks into the 
 ## Dashboard Layout
 
 <p align="center">
-  <img src="asset/MIZN_UI.png" alt="MIZN TUI Dashboard" width="700"/>
+  <img src="asset/Updated_mizn.png" alt="MIZN TUI Dashboard" width="700"/>
 </p>
-
-```
-+-- RX/s --------+-- TX/s --------+-- PEAK --------+-- INTERFACE ---+
-|  1.2 MB/s       |  340 KB/s      |  8.4 MB/s      |  wlp3s0        |
-+-----------------+----------------+----------------+----------------+
-+-- THROUGHPUT 60s --------------------------------------------------+
-|  [Braille RX/TX line chart]                                        |
-+--------------------------------------------------------------------+
-+-- PROCESS & CONNECTION MONITOR -----------+-- ACTIVE ALERTS -------+
-|  PID  BINARY      RX/s  TX/s  SNI  FLAGS |  Port Scan: sshd       |
-|  ...  nginx       ...   ...   ...  ACK   +-- XDP FIREWALL --------+
-|  ...  curl        ...   ...   ...  SYN   |  1.2.3.4 (blocked)     |
-+------------------------------------------+------------------------+
-+-- [Q] Quit  [B] Block Top IP  MIZN kernel agent active ------------+
-```
 
 **Panels:**
 

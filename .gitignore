@@ -1,2 +1,55 @@
+# Build artifacts
 /target
 /mizn-ebpf/target
+
+# Telemetry & flow logs (contains IP addresses, PIDs, SNI hostnames)
+miznd_flow_history.csv
+*.csv
+
+# PCAP dumps (raw packet payloads)
+*.pcap
+*.pcapng
+
+# IPC sockets
+*.sock
+
+# Environment / secrets
+.env
+.env.*
+*.key
+*.pem
+*.crt
+*.p12
+
+# Database files (future telemetry persistence)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# OS junk
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+\#*\#
+
+# IDE / editor
+.vscode/
+.idea/
+*.iml
+.fleet/
+
+# Cargo lock for library crates (keep root Cargo.lock)
+mizn-ebpf/Cargo.lock
+
+# Core dumps
+core
+core.*
+vgcore.*
+
+# GeoIP / MaxMind databases (may contain licensed data)
+*.mmdb
+GeoLite2-*.tar.gz

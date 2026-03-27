@@ -7,10 +7,10 @@ use rkyv::ser::serializers::{BufferSerializer, BufferScratch, CompositeSerialize
 use rkyv::ser::Serializer;
 use rkyv::Infallible;
 use mizn_common::bpf::{FlowKey, FlowMetrics};
-use mizn_common::ipc::{IpcProcessMetrics, IpcState};
+use mizn_common::ipc::{IpcProcessMetrics, IpcState, IpcCommand};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixListener;
 use tokio::sync::RwLock;
 
@@ -58,14 +58,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut bpf_shadow_map: HashMap<FlowKey, FlowMetrics> = HashMap::with_capacity(10240);
     let mut global_state = IpcState::default();
+
+    let mut csv_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("miznd_flow_history.csv")?;
+    use std::io::Write;
+    if csv_file.metadata()?.len() == 0 {
+        writeln!(csv_file, "Timestamp,PID,Process,Bytes,SNI")?;
+    }
+
+    let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<u32>();
+    let cmd_socket_path = "/run/miznd_cmd.sock";
+    let _ = std::fs::remove_file(cmd_socket_path);
+    let cmd_listener = UnixListener::bind(cmd_socket_path)?;
+    tokio::spawn(async move {
+        let mut cmd_buffer = [0u8; 1024];
+        while let Ok((mut stream, _)) = cmd_listener.accept().await {
+            let cmd_tx_clone = cmd_tx.clone();
+            tokio::spawn(async move {
+                while let Ok(size) = stream.read(&mut cmd_buffer).await {
+                    if size == 0 { break; }
+                    let archived = unsafe { rkyv::archived_root::<IpcCommand>(&cmd_buffer[..size]) };
+                    let cmd: IpcCommand = rkyv::Deserialize::deserialize(archived, &mut rkyv::Infallible).unwrap();
+                    let IpcCommand::BlockIp(ip) = cmd;
+                    let _ = cmd_tx_clone.send(ip);
+                }
+            });
+        }
+    });
+
     let mut serialization_buffer = [0u8; TELEMETRY_BUFFER_SIZE];
     let mut scratch_buffer = [0u8; 4096];
 
-    let flow_metrics_map: BpfHashMap<_, FlowKey, FlowMetrics> =
-        BpfHashMap::try_from(bpf.map_mut("FLOW_METRICS").unwrap())?;
-
     loop {
         tokio::time::sleep(AGGREGATION_INTERVAL).await;
+
+        let mut blocklist_map: BpfHashMap<_, u32, u8> =
+            BpfHashMap::try_from(bpf.map_mut("BLOCKLIST").unwrap())?;
+
+        while let Ok(ip) = cmd_rx.try_recv() {
+            let _ = blocklist_map.insert(ip, 1, 0);
+            eprintln!("[miznd] Blocked IP: {}", std::net::Ipv4Addr::from(ip.to_be()));
+        }
+
+        let flow_metrics_map: BpfHashMap<_, FlowKey, FlowMetrics> =
+            BpfHashMap::try_from(bpf.map_mut("FLOW_METRICS").unwrap())?;
 
         let registry = socket_registry.read().await;
         let mut delta_tx = 0u64;
@@ -83,13 +121,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             if bytes_delta > 0 {
                 if let Some((pid, name, is_tx)) = resolve_flow(&registry, &key) {
+                    let name_for_csv = name.clone();
                     let entry = global_state.active_process_telemetry.entry(pid).or_insert_with(|| {
                         IpcProcessMetrics::new(pid, name)
                     });
 
                     entry.update_from_delta(bytes_delta, is_tx, &metrics);
+                    if !is_tx {
+                        entry.last_resolved_remote_peer_ipv4 = Some(key.source_ip);
+                    } else {
+                        entry.last_resolved_remote_peer_ipv4 = Some(key.destination_ip);
+                    }
                     delta_tx += bytes_delta * (is_tx as u64);
                     delta_rx += bytes_delta * (!is_tx as u64);
+
+                    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                    let sni_str = String::from_utf8_lossy(&metrics.sni).trim_matches(char::from(0)).to_string();
+                    let _ = writeln!(csv_file, "{},{},{},{},{}", ts, pid, name_for_csv, bytes_delta, sni_str);
                 }
                 *previous = metrics;
             }

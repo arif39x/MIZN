@@ -15,3 +15,18 @@ procfs = "0.16.0"
 mizn-common = { path = "../mizn-common", features = ["std"] }
 bytemuck = { version = "1.13.1", features = ["derive"] }
 anyhow = "1.0"
+
+# Task 4: SQLite WAL — persistent telemetry (bundled, no system libsqlite3)
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Task 2: L7 DPI — nom zero-copy parser for HTTP and DNS dissection
+nom = "7"
+
+# Task 6: SMTP alerts via lettre
+lettre = { version = "0.11", features = ["smtp-transport", "builder", "tokio1", "tokio1-native-tls"] }
+
+# Task 7: ClickHouse streaming — enterprise-grade long-term analytics
+clickhouse = { version = "0.11", features = ["tls"] }
+
+# Task 7: serde support for ClickHouse row serialization
+serde = { version = "1", features = ["derive"] }

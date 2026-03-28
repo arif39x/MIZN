@@ -1,212 +1,69 @@
+mod alerting;
+mod bpf_loader;
+mod clickhouse;
+mod core_loop;
+mod ipc_server;
+mod pcap_task;
+mod pcap_writer;
 mod resolver;
+mod telemetry;
 
-use aya::{include_bytes_aligned, Ebpf};
-use aya::maps::HashMap as BpfHashMap;
-use aya::programs::{Xdp, XdpFlags};
-use rkyv::ser::serializers::{BufferSerializer, BufferScratch, CompositeSerializer};
-use rkyv::ser::Serializer;
-use rkyv::Infallible;
-use mizn_common::bpf::{FlowKey, FlowMetrics};
-use mizn_common::ipc::{IpcProcessMetrics, IpcState, IpcCommand};
-use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::UnixListener;
 use tokio::sync::RwLock;
 
-const TELEMETRY_BUFFER_SIZE: usize = 524288;
 const REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_millis(500);
-const AGGREGATION_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut bpf = Ebpf::load(include_bytes_aligned!(
-        "../../target/bpfel-unknown-none/release/mizn-ebpf"
-    ))?;
-
     let iface = std::env::var("MIZN_IFACE").unwrap_or_else(|_| detect_iface());
     eprintln!("[miznd] Attaching XDP to interface: {iface}");
 
-    let program: &mut Xdp = bpf.program_mut("mizn_ebpf").unwrap().try_into()?;
-    program.load()?;
-    program.attach(&iface, XdpFlags::default())?;
+    let bpf_ctx = bpf_loader::BpfContext::load_and_attach(&iface)?;
 
     let socket_registry = Arc::new(RwLock::new(resolver::SocketsMap::with_capacity(8192)));
-    let registry_ptr = socket_registry.clone();
-
-    tokio::spawn(async move {
-        loop {
-            let next_topology = resolver::refresh_sockets_map();
-            let mut lock = registry_ptr.write().await;
-            *lock = next_topology;
-            drop(lock);
-            tokio::time::sleep(REFRESH_INTERVAL).await;
-        }
-    });
-
-    let socket_path = "/run/miznd.sock";
-    let _ = std::fs::remove_file(socket_path);
-    let listener = UnixListener::bind(socket_path)?;
-    let connections = Arc::new(RwLock::new(Vec::with_capacity(16)));
-    let conn_pool = connections.clone();
-
-    tokio::spawn(async move {
-        while let Ok((stream, _)) = listener.accept().await {
-            conn_pool.write().await.push(stream);
-        }
-    });
-
-    let mut bpf_shadow_map: HashMap<FlowKey, FlowMetrics> = HashMap::with_capacity(10240);
-    let mut global_state = IpcState::default();
-
-    let mut csv_file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("miznd_flow_history.csv")?;
-    use std::io::Write;
-    if csv_file.metadata()?.len() == 0 {
-        writeln!(csv_file, "Timestamp,PID,Process,Bytes,SNI")?;
-    }
-
-    let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<u32>();
-    let cmd_socket_path = "/run/miznd_cmd.sock";
-    let _ = std::fs::remove_file(cmd_socket_path);
-    let cmd_listener = UnixListener::bind(cmd_socket_path)?;
-    tokio::spawn(async move {
-        let mut cmd_buffer = [0u8; 1024];
-        while let Ok((mut stream, _)) = cmd_listener.accept().await {
-            let cmd_tx_clone = cmd_tx.clone();
-            tokio::spawn(async move {
-                while let Ok(size) = stream.read(&mut cmd_buffer).await {
-                    if size == 0 { break; }
-                    let archived = unsafe { rkyv::archived_root::<IpcCommand>(&cmd_buffer[..size]) };
-                    let cmd: IpcCommand = rkyv::Deserialize::deserialize(archived, &mut rkyv::Infallible).unwrap();
-                    let IpcCommand::BlockIp(ip) = cmd;
-                    let _ = cmd_tx_clone.send(ip);
-                }
-            });
-        }
-    });
-
-    let mut serialization_buffer = [0u8; TELEMETRY_BUFFER_SIZE];
-    let mut scratch_buffer = [0u8; 4096];
-
-    loop {
-        tokio::time::sleep(AGGREGATION_INTERVAL).await;
-
-        let mut blocklist_map: BpfHashMap<_, u32, u8> =
-            BpfHashMap::try_from(bpf.map_mut("BLOCKLIST").unwrap())?;
-
-        while let Ok(ip) = cmd_rx.try_recv() {
-            let _ = blocklist_map.insert(ip, 1, 0);
-            eprintln!("[miznd] Blocked IP: {}", std::net::Ipv4Addr::from(ip.to_be()));
-        }
-
-        let flow_metrics_map: BpfHashMap<_, FlowKey, FlowMetrics> =
-            BpfHashMap::try_from(bpf.map_mut("FLOW_METRICS").unwrap())?;
-
-        let registry = socket_registry.read().await;
-        let mut delta_tx = 0u64;
-        let mut delta_rx = 0u64;
-
-        global_state.active_process_telemetry.values_mut().for_each(|m| {
-            m.temporal_transmission_accumulator = 0;
-            m.temporal_reception_accumulator = 0;
-        });
-
-        for result in flow_metrics_map.iter().filter_map(|r| r.ok()) {
-            let (key, metrics) = result;
-            let previous = bpf_shadow_map.entry(key).or_insert_with(FlowMetrics::default);
-            let bytes_delta = metrics.bytes.wrapping_sub(previous.bytes);
-
-            if bytes_delta > 0 {
-                if let Some((pid, name, is_tx)) = resolve_flow(&registry, &key) {
-                    let name_for_csv = name.clone();
-                    let entry = global_state.active_process_telemetry.entry(pid).or_insert_with(|| {
-                        IpcProcessMetrics::new(pid, name)
-                    });
-
-                    entry.update_from_delta(bytes_delta, is_tx, &metrics);
-                    if !is_tx {
-                        entry.last_resolved_remote_peer_ipv4 = Some(key.source_ip);
-                    } else {
-                        entry.last_resolved_remote_peer_ipv4 = Some(key.destination_ip);
-                    }
-                    delta_tx += bytes_delta * (is_tx as u64);
-                    delta_rx += bytes_delta * (!is_tx as u64);
-
-                    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-                    let sni_str = String::from_utf8_lossy(&metrics.sni).trim_matches(char::from(0)).to_string();
-                    let _ = writeln!(csv_file, "{},{},{},{},{}", ts, pid, name_for_csv, bytes_delta, sni_str);
-                }
-                *previous = metrics;
+    {
+        let reg = socket_registry.clone();
+        tokio::spawn(async move {
+            loop {
+                let map = resolver::refresh_sockets_map();
+                *reg.write().await = map;
+                tokio::time::sleep(REFRESH_INTERVAL).await;
             }
-        }
-
-        global_state.finalize_tick(delta_tx, delta_rx);
-
-        let mut serializer = CompositeSerializer::new(
-            BufferSerializer::new(&mut serialization_buffer),
-            BufferScratch::new(&mut scratch_buffer),
-            Infallible,
-        );
-
-        if serializer.serialize_value(&global_state).is_ok() {
-            let bytes_len = serializer.pos();
-            broadcast_telemetry(&connections, &serialization_buffer[..bytes_len]).await;
-        }
+        });
     }
-}
 
-#[inline(always)]
-fn resolve_flow<'a>(registry: &'a resolver::SocketsMap, key: &FlowKey) -> Option<(i32, String, bool)> {
-    registry.get(&key.source_port).map(|s| (s.0, s.1.clone(), true))
-        .or_else(|| registry.get(&key.destination_port).map(|s| (s.0, s.1.clone(), false)))
-}
+    let connections = ipc_server::start_telemetry_socket()?;
+    let cmd_rx = ipc_server::start_command_socket()?;
 
+    let ch_sender = clickhouse::try_spawn();
+    if ch_sender.is_some() {
+        eprintln!("[miznd] ClickHouse streaming enabled → {}", std::env::var("MIZN_CH_URL").unwrap_or_default());
+    }
+
+    let alert_config = alerting::AlertConfig::default();
+    let (alert_tx, alert_rx) = alerting::spawn(alert_config);
+    pcap_task::start_alert_handler(alert_rx);
+
+    core_loop::run(core_loop::CoreLoopArgs {
+        bpf: bpf_ctx.ebpf,
+        cmd_rx,
+        ch_sender,
+        alert_tx,
+        connections,
+        socket_registry,
+    }).await;
+
+    Ok(())
+}
 
 fn detect_iface() -> String {
-    let Ok(entries) = std::fs::read_dir("/sys/class/net") else {
-        return "wlan0".to_string();
-    };
-
-    let mut candidates: Vec<String> = entries
-        .filter_map(|e| e.ok())
-        .map(|e| e.file_name().to_string_lossy().to_string())
-        .filter(|name| name != "lo")
-        .filter(|name| {
-            let state_path = format!("/sys/class/net/{}/operstate", name);
-            std::fs::read_to_string(&state_path)
-                .map(|s| s.trim() == "up")
-                .unwrap_or(false)
-        })
+    let Ok(entries) = std::fs::read_dir("/sys/class/net") else { return "wlan0".to_string(); };
+    let mut list: Vec<String> = entries.filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n != "lo")
+        .filter(|n| std::fs::read_to_string(format!("/sys/class/net/{}/operstate", n)).map(|s| s.trim() == "up").unwrap_or(false))
         .collect();
-
-
-    candidates.sort_by_key(|n| {
-        if n.starts_with("en") || n.starts_with("eth") { 0u8 }
-        else if n.starts_with("wlan") || n.starts_with("wlp") { 1 }
-        else { 2 }
+    list.sort_by_key(|n| {
+        if n.starts_with("en") || n.starts_with("eth") { 0u8 } else if n.starts_with("wlan") || n.starts_with("wlp") { 1 } else { 2 }
     });
-
-    candidates.into_iter().next().unwrap_or_else(|| "wlan0".to_string())
-}
-
-async fn broadcast_telemetry(conns: &Arc<RwLock<Vec<tokio::net::UnixStream>>>, data: &[u8]) {
-    let mut writable_conns = conns.write().await;
-    let data_len = data.len() as u32;
-    let mut active = Vec::with_capacity(writable_conns.len());
-
-
-    for mut conn in writable_conns.drain(..) {
-        match conn.write_u32(data_len).await {
-            Ok(_) => {
-                if conn.write_all(data).await.is_ok() {
-                    active.push(conn);
-                }
-            }
-            Err(_) => {}
-        }
-    }
-    *writable_conns = active;
+    list.into_iter().next().unwrap_or_else(|| "wlan0".to_string())
 }

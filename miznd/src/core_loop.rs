@@ -20,6 +20,7 @@ pub struct CoreLoopArgs {
     pub cmd_rx: tokio::sync::mpsc::UnboundedReceiver<u32>,
     pub ch_sender: Option<tokio::sync::mpsc::UnboundedSender<Vec<IpcProcessMetrics>>>,
     pub alert_tx: tokio::sync::mpsc::UnboundedSender<IpcState>,
+    pub ui_alert_rx: tokio::sync::mpsc::UnboundedReceiver<String>,
     pub connections: Arc<RwLock<Vec<tokio::net::UnixStream>>>,
     pub socket_registry: Arc<RwLock<SocketsMap>>,
     pub db: Arc<Mutex<Connection>>,
@@ -96,6 +97,29 @@ pub async fn run(mut args: CoreLoopArgs) {
         }
 
         global_state.finalize_tick(dtx, drx);
+
+        while let Ok(msg) = args.ui_alert_rx.try_recv() {
+            global_state.push_alert(msg);
+        }
+
+        let mut new_alerts = Vec::new();
+        for pm in global_state.active_process_telemetry.values() {
+            let syn_no_ack = (pm.tcp_flags & 0x02 != 0) && (pm.tcp_flags & 0x10 == 0);
+            if syn_no_ack {
+                let msg = format!("Port Scan: {} (PID {})", pm.process_nomenclature, pm.process_identifier);
+                new_alerts.push(msg);
+            }
+            let high_bw = (pm.transmission_rate_bytes_per_second + pm.reception_rate_bytes_per_second) > 52_428_800; // 50MB/s
+            if high_bw {
+                let msg = format!("High Bandwidth: {} (PID {})", pm.process_nomenclature, pm.process_identifier);
+                new_alerts.push(msg);
+            }
+        }
+        
+        for msg in new_alerts {
+            global_state.push_alert(msg);
+        }
+
         let _ = args.alert_tx.send(global_state.clone());
 
         if let Some(ref ch_tx) = args.ch_sender {

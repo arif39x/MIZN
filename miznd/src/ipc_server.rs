@@ -8,6 +8,10 @@ pub fn start_telemetry_socket() -> Result<Arc<RwLock<Vec<tokio::net::UnixStream>
     let socket_path = "/run/miznd.sock";
     let _ = std::fs::remove_file(socket_path);
     let listener = UnixListener::bind(socket_path)?;
+    
+    use std::os::unix::fs::PermissionsExt;
+    let _ = std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o666));
+
     let connections = Arc::new(RwLock::new(Vec::<tokio::net::UnixStream>::with_capacity(16)));
     let conns = connections.clone();
     
@@ -25,6 +29,9 @@ pub fn start_command_socket() -> Result<tokio::sync::mpsc::UnboundedReceiver<u32
     let cmd_socket_path = "/run/miznd_cmd.sock";
     let _ = std::fs::remove_file(cmd_socket_path);
     let cmd_listener = UnixListener::bind(cmd_socket_path)?;
+
+    use std::os::unix::fs::PermissionsExt;
+    let _ = std::fs::set_permissions(cmd_socket_path, std::fs::Permissions::from_mode(0o666));
     
     tokio::spawn(async move {
         let mut buf = [0u8; 1024];

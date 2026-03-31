@@ -60,10 +60,9 @@ impl AppState {
                             use rkyv::Deserialize;
                             // Deserialize zero-copy
                             let archived = unsafe { rkyv::archived_root::<IpcState>(&payload) };
-                            if let Ok(state) = archived.deserialize(&mut rkyv::Infallible) {
-                                *telemetry_clone.write().unwrap() = state;
-                                ctx_clone.request_repaint(); // Trigger UI refresh
-                            }
+                            let state: IpcState = rkyv::Deserialize::deserialize(archived, &mut rkyv::Infallible).unwrap();
+                            *telemetry_clone.write().unwrap() = state;
+                            ctx_clone.request_repaint(); // Trigger UI refresh
                         }
                     }
                     tokio::time::sleep(Duration::from_secs(2)).await;

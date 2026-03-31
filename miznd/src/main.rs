@@ -53,11 +53,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (alert_tx, alert_rx) = alerting::spawn(alert_config);
     pcap_task::start_alert_handler(alert_rx);
 
+    let (ui_alert_tx, ui_alert_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+
     // Honey-ports
-    crate::features::honey_port::start(db.clone());
+    crate::features::honey_port::start(db.clone(), ui_alert_tx.clone());
 
     // ARP Monitoring (Layer 2)
-    crate::features::arp_monitor::start(db.clone());
+    crate::features::arp_monitor::start(db.clone(), ui_alert_tx.clone());
 
     // Core loop (eBPF flow aggregation + telemetry)
     core_loop::run(core_loop::CoreLoopArgs {
@@ -65,6 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         cmd_rx,
         ch_sender,
         alert_tx,
+        ui_alert_rx,
         connections,
         socket_registry,
         db,

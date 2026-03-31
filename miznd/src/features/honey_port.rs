@@ -17,9 +17,10 @@ use tokio::net::TcpListener;
 const HONEY_PORTS: &[u16] = &[21, 23, 2323];
 
 /// Spawn async Tokio tasks for all honey-port listeners.
-pub fn start(db: Arc<Mutex<Connection>>) {
+pub fn start(db: Arc<Mutex<Connection>>, alert_tx: tokio::sync::mpsc::UnboundedSender<String>) {
     for &port in HONEY_PORTS {
         let db = db.clone();
+        let alert_tx = alert_tx.clone();
         tokio::spawn(async move {
             let addr = format!("0.0.0.0:{port}");
             let listener = match TcpListener::bind(&addr).await {
@@ -38,6 +39,7 @@ pub fn start(db: Arc<Mutex<Connection>>) {
                     Ok((socket, remote)) => {
                         // Drop the socket immediately — the tarpit sends nothing.
                         drop(socket);
+                        let _ = alert_tx.send(format!("HONEY TRAP: {remote} hit port {port}"));
                         handle_trigger(&db, remote, port);
                     }
                     Err(e) => {

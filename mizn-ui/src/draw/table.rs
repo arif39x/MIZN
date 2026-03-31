@@ -23,8 +23,10 @@ pub fn draw_process_table(f: &mut Frame, app: &AppState, area: Rect) {
         bv.cmp(&av)
     });
 
+    let max_total = procs.iter().map(|pm| pm.transmission_rate_bytes_per_second + pm.reception_rate_bytes_per_second).max().unwrap_or(1);
+
     let max_rows = area.height.saturating_sub(4) as usize;
-    let rows: Vec<Row> = procs.iter().take(max_rows).map(|pm| {
+    let rows: Vec<Row> = procs.iter().enumerate().take(max_rows).map(|(i, pm)| {
         let total = pm.transmission_rate_bytes_per_second + pm.reception_rate_bytes_per_second;
         let syn_scan = (pm.tcp_flags & 0x02 != 0) && (pm.tcp_flags & 0x10 == 0);
 
@@ -36,13 +38,18 @@ pub fn draw_process_table(f: &mut Frame, app: &AppState, area: Rect) {
             String::new()
         };
 
-        let row_style = if syn_scan {
-            Style::default().fg(C_ALERT).add_modifier(Modifier::BOLD | Modifier::REVERSED)
+        let is_selected = app.selected_index == i;
+        let mut row_style = if syn_scan {
+            Style::default().fg(C_ALERT).add_modifier(Modifier::BOLD)
         } else if total > 52_428_800 {
             Style::default().fg(C_WARN).add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(C_LABEL)
         };
+        
+        if is_selected {
+            row_style = row_style.add_modifier(Modifier::REVERSED);
+        }
 
         let flags = fmt_tcp_flags(pm.tcp_flags);
         let sni = if pm.sni.is_empty() {
@@ -51,12 +58,21 @@ pub fn draw_process_table(f: &mut Frame, app: &AppState, area: Rect) {
             pm.sni.chars().take(20).collect()
         };
 
+        let bar_width = 15;
+        let blocks = if max_total > 0 {
+            ((total as f64 / max_total as f64) * bar_width as f64).round() as usize
+        } else {
+            0
+        };
+        let bar_str = "▉".repeat(blocks) + &" ".repeat(bar_width - blocks);
+
         Row::new(vec![
             Cell::from(pm.process_identifier.to_string()).style(Style::default().fg(C_DIM)),
             Cell::from(format!("{}{}", pm.process_nomenclature, name_suffix)).style(row_style),
             Cell::from(format_bytes(pm.reception_rate_bytes_per_second)).style(Style::default().fg(C_GREEN)),
             Cell::from(format_bytes(pm.transmission_rate_bytes_per_second)).style(Style::default().fg(C_ACCENT2)),
             Cell::from(format_bytes(total)).style(Style::default().fg(C_ACCENT)),
+            Cell::from(bar_str).style(Style::default().fg(C_ACCENT)),
             Cell::from(sni).style(Style::default().fg(C_DIM)),
             Cell::from(flags).style(Style::default().fg(C_WARN)),
         ])
@@ -70,12 +86,14 @@ pub fn draw_process_table(f: &mut Frame, app: &AppState, area: Rect) {
             Constraint::Length(10),
             Constraint::Length(10),
             Constraint::Length(10),
+            Constraint::Length(16),
             Constraint::Length(20),
             Constraint::Length(8),
         ],
     )
-    .header(Row::new(["PID", "BINARY", "RX/s", "TX/s", "TOTAL", "SNI / DEST", "FLAGS"])
+    .header(Row::new(["PID", "BINARY", "RX/s", "TX/s", "TOTAL", "ACTIVITY", "SNI / DEST", "FLAGS"])
             .style(Style::default().fg(C_TITLE).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))
+
     .block(Block::default()
             .title("  PROCESS & CONNECTION MONITOR ")
             .borders(Borders::ALL)

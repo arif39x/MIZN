@@ -19,12 +19,22 @@ echo "[*] Building workspace..."
 sudo -u "$SUDO_USER" cargo build --workspace
 
 echo "[*] Checking core daemon status..."
+# Ensure sockets have correct permissions even if already running
+if [ -S "/run/miznd.sock" ]; then
+    chmod 666 /run/miznd.sock 2>/dev/null
+    chmod 666 /run/miznd_cmd.sock 2>/dev/null
+fi
+
 if pgrep -x "miznd" > /dev/null; then
     echo "[+] MIZN Daemon is already running."
 else
     echo "[*] Starting MIZN Daemon in the background..."
+    rm -f /run/miznd.sock /run/miznd_cmd.sock
     ./target/debug/miznd &
     DAEMON_PID=$!
+    sleep 2
+    chmod 666 /run/miznd.sock 2>/dev/null
+    chmod 666 /run/miznd_cmd.sock 2>/dev/null
     echo "[+] Daemon started with PID $DAEMON_PID."
 fi
 
@@ -46,16 +56,19 @@ while true; do
         1)
             echo "[*] Launching Terminal UI..."
             sleep 1
-            ./mizn_view.sh
+            sudo -u "$SUDO_USER" ./target/debug/mizn-ui
+            if [ $? -ne 0 ]; then
+                echo " [!] TUI exited with an error. Check if 'miznd' is running and socket permissions are correct."
+                sleep 2
+            fi
             ;;
         2)
             echo "[*] Launching Native Rust GUI..."
-            if [ -d "$GUI_DIR" ]; then
-                cd "$GUI_DIR"
-                sudo -u "$SUDO_USER" cargo run
-                cd ..
-            else
-                echo " GUI directory '$GUI_DIR' not found."
+            sleep 1
+            sudo -u "$SUDO_USER" ./target/debug/mizn-gui
+            if [ $? -ne 0 ]; then
+                echo " [!] GUI exited with an error. Check if 'miznd' is running and socket permissions are correct."
+                sleep 2
             fi
             ;;
         3)

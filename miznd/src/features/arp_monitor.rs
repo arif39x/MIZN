@@ -35,14 +35,14 @@ const MIN_FRAME_LEN: usize = ETH_HLEN + 28;
 const ETH_P_ARP: u16 = 0x0806;
 
 /// Spawn a dedicated OS thread that reads ARP frames from a raw socket.
-pub fn start(db: Arc<Mutex<Connection>>) {
+pub fn start(db: Arc<Mutex<Connection>>, alert_tx: tokio::sync::mpsc::UnboundedSender<String>) {
     std::thread::Builder::new()
         .name("mizn-arp".into())
-        .spawn(move || run_arp_loop(db))
+        .spawn(move || run_arp_loop(db, alert_tx))
         .expect("failed to spawn ARP monitor thread");
 }
 
-fn run_arp_loop(db: Arc<Mutex<Connection>>) {
+fn run_arp_loop(db: Arc<Mutex<Connection>>, alert_tx: tokio::sync::mpsc::UnboundedSender<String>) {
     // Open raw AF_PACKET socket for ARP frames only.
     // SAFETY: libc FFI — standard socket(2) call.
     let sock = unsafe {
@@ -136,10 +136,11 @@ fn run_arp_loop(db: Arc<Mutex<Connection>>) {
                 );
                 // Update registry to latest MAC (could be legitimate change)
                 registry.insert(spa, sha);
+                let detail = format!("ARP_SPOOF_ATTACK: {ip_str} changed MAC {known_str}→{mac_str}");
+                let _ = alert_tx.send(detail.clone());
                 if let Ok(conn) = db.lock() {
                     let _ = crate::core::database::upsert_arp_entry(&conn, &ip_str, &mac_str, ts);
                     // Log as a critical threat alert (port 0 = N/A for ARP)
-                    let detail = format!("ARP_SPOOF_ATTACK: {ip_str} changed MAC {known_str}→{mac_str}");
                     let _ = crate::core::database::record_threat_alert(&conn, "ARP_SPOOF_ATTACK", &detail, 0);
                 }
             }

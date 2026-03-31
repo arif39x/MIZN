@@ -26,13 +26,13 @@ pub fn draw_header(f: &mut Frame, app: &AppState, area: Rect) {
     let make_block = Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(border_style);
 
     let rx_text = Text::from(vec![
-        Line::from(Span::styled("  ↓ RX / s", Style::default().fg(C_DIM))),
+        Line::from(Span::styled("   RX / s", Style::default().fg(C_DIM))),
         Line::from(Span::styled(format_bytes(t.aggregate_reception_rate_bytes_per_second), Style::default().fg(C_GREEN).add_modifier(Modifier::BOLD))),
     ]);
     f.render_widget(Paragraph::new(rx_text).alignment(Alignment::Center).block(make_block.clone()), cols[0]);
 
     let tx_text = Text::from(vec![
-        Line::from(Span::styled("  ↑ TX / s", Style::default().fg(C_DIM))),
+        Line::from(Span::styled("   TX / s", Style::default().fg(C_DIM))),
         Line::from(Span::styled(format_bytes(t.aggregate_transmission_rate_bytes_per_second), Style::default().fg(C_ACCENT2).add_modifier(Modifier::BOLD))),
     ]);
     f.render_widget(Paragraph::new(tx_text).alignment(Alignment::Center).block(make_block.clone()), cols[1]);

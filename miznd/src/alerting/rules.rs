@@ -8,7 +8,7 @@ pub fn evaluate_rules(state: &IpcState, config: &AlertConfig, out: &mut Vec<Aler
             out.push(Alert {
                 timestamp:    Instant::now(),
                 level:        AlertLevel::Critical,
-                message:      format!("⚠ Port Scan: '{}' (PID {}) — SYN flood/scan pattern", pm.process_nomenclature, pm.process_identifier),
+                message:      format!(" Port Scan: '{}' (PID {}) — SYN flood/scan pattern", pm.process_nomenclature, pm.process_identifier),
                 trigger_pcap: true,
             });
         }
@@ -18,7 +18,7 @@ pub fn evaluate_rules(state: &IpcState, config: &AlertConfig, out: &mut Vec<Aler
             out.push(Alert {
                 timestamp:    Instant::now(),
                 level:        AlertLevel::Warning,
-                message:      format!("↑ High Bandwidth: '{}' (PID {}) at {:.1} MB/s", pm.process_nomenclature, pm.process_identifier, total as f64 / 1_048_576.0),
+                message:      format!(" High Bandwidth: '{}' (PID {}) at {:.1} MB/s", pm.process_nomenclature, pm.process_identifier, total as f64 / 1_048_576.0),
                 trigger_pcap: false,
             });
         }
@@ -29,7 +29,7 @@ pub fn evaluate_rules(state: &IpcState, config: &AlertConfig, out: &mut Vec<Aler
         out.push(Alert {
             timestamp:    Instant::now(),
             level:        AlertLevel::Critical,
-            message:      format!("⚡ Global spike: {:.1} MB/s — possible DDoS or exfiltration", global as f64 / 1_048_576.0),
+            message:      format!(" Global spike: {:.1} MB/s — possible DDoS or exfiltration", global as f64 / 1_048_576.0),
             trigger_pcap: true,
         });
     }

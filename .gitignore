@@ -2,6 +2,9 @@
 /mizn-ebpf/target
 miznd_flow_history.csv
 # Telemetry SQLite logs (contains IPs, SNIs, metrics)
+miznd_telemetry.db
+miznd_telemetry.db-shm
+miznd_telemetry.db-wal
 miznd_telemetry.*
 *.csv
 *.pcap
@@ -14,9 +17,9 @@ miznd_telemetry.*
 *.crt
 *.p12
 *.db
-*.db-shm
-*.db-wal
+*.db-*
 *.sqlite
+*.sqlite-*
 *.sqlite3
 .DS_Store
 Thumbs.db
@@ -38,3 +41,8 @@ GeoLite2-*.tar.gz
 
 # Generated CO-RE kernel Headers
 mizn-ebpf/src/vmlinux.h
+
+# Secrets and sensitive configs
+secrets/
+config/*.secret.toml
+credentials*

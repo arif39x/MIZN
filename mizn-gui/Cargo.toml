@@ -1,0 +1,16 @@
+[package]
+name = "mizn-gui"
+version = "0.1.0"
+edition = "2024"
+description = "Native Desktop GUI for MIZN"
+
+[dependencies]
+eframe = "0.28.1"
+egui = "0.28.1"
+egui_plot = "0.28.1"
+
+mizn-common = { path = "../mizn-common", features = ["std"] }
+tokio = { version = "1.41.0", features = ["full"] }
+rkyv = { version = "0.7.46", features = ["validation", "alloc"] }
+rusqlite = { version = "0.32.1", features = ["bundled"] }
+human_bytes = "0.4.3"

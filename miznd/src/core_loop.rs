@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
 use rkyv::ser::serializers::{BufferSerializer, BufferScratch, CompositeSerializer};
@@ -8,8 +8,9 @@ use rkyv::Infallible;
 use aya::maps::HashMap as BpfHashMap;
 use mizn_common::bpf::{FlowKey, FlowMetrics};
 use mizn_common::ipc::{IpcProcessMetrics, IpcState};
-use crate::resolver::SocketsMap;
-use crate::telemetry;
+use rusqlite::Connection;
+use crate::features::process_map::SocketsMap;
+use crate::core::database;
 
 const TELEMETRY_BUFFER_SIZE: usize = 524288;
 const AGGREGATION_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
@@ -21,6 +22,7 @@ pub struct CoreLoopArgs {
     pub alert_tx: tokio::sync::mpsc::UnboundedSender<IpcState>,
     pub connections: Arc<RwLock<Vec<tokio::net::UnixStream>>>,
     pub socket_registry: Arc<RwLock<SocketsMap>>,
+    pub db: Arc<Mutex<Connection>>,
 }
 
 pub async fn run(mut args: CoreLoopArgs) {
@@ -28,7 +30,6 @@ pub async fn run(mut args: CoreLoopArgs) {
     let mut global_state = IpcState::default();
     let mut serial_buf   = [0u8; TELEMETRY_BUFFER_SIZE];
     let mut scratch_buf  = [0u8; 4096];
-    let db = telemetry::open("miznd_telemetry.db").expect("Failed to open SQLite db");
 
     loop {
         tokio::time::sleep(AGGREGATION_INTERVAL).await;
@@ -77,7 +78,9 @@ pub async fn run(mut args: CoreLoopArgs) {
                     if let Some((pid, name, is_tx)) = resolved {
                         let protocol = proto_name(key.protocol);
                         let sni = String::from_utf8_lossy(&metrics.sni).trim_matches(char::from(0)).to_string();
-                        let _ = telemetry::record_flow(&db, ts, pid, &name, delta_bytes, &sni, protocol);
+                        if let Ok(conn) = args.db.lock() {
+                            let _ = database::record_flow(&conn, ts, pid, &name, delta_bytes, &sni, protocol);
+                        }
                         
                         let entry = global_state.active_process_telemetry.entry(pid).or_insert_with(|| IpcProcessMetrics::new(pid, name));
                         entry.update_from_delta(delta_bytes, is_tx, &metrics);

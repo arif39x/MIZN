@@ -15,3 +15,13 @@ procfs = "0.16.0"
 mizn-common = { path = "../mizn-common", features = ["std"] }
 bytemuck = { version = "1.13.1", features = ["derive"] }
 anyhow = "1.0"
+
+
+rusqlite = { version = "0.32", features = ["bundled"] }
+nom = "7"
+lettre = { version = "0.11", features = ["smtp-transport", "builder", "tokio1", "tokio1-native-tls"] }
+clickhouse = { version = "0.11", features = ["tls"] }
+serde = { version = "1", features = ["derive"] }
+libc = "0.2"
+pcap = "2.2.0"
+etherparse = "0.14.3"

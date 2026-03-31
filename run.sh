@@ -1,53 +1,71 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
 
-REAL_USER="${SUDO_USER:-$USER}"
-REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
-export PATH="$REAL_HOME/.cargo/bin:$PATH"
+DB_FILE="miznd_telemetry.db"
+GUI_DIR="mizn-gui"
 
-SOCKET="/run/miznd.sock"
-BINARY_PATH="./target/bpfel-unknown-none/release/mizn-ebpf"
-
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
-info()  { echo -e "${GREEN}[mizn]${NC} $*"; }
-warn()  { echo -e "${YELLOW}[mizn]${NC} $*"; }
-error() { echo -e "${RED}[mizn]${NC} $*"; exit 1; }
-
-[[ $EUID -ne 0 ]] && error "Run as root (sudo ./run.sh) — miznd needs CAP_BPF/NET_ADMIN."
-
-if [[ ! -f "$BINARY_PATH" ]]; then
-    warn "eBPF binary not found. Running xtask build first..."
-    cargo xtask build
+if [ "$EUID" -ne 0 ]; then
+  echo " Please run as root (sudo ./run.sh)"
+  exit 1
 fi
 
-info "Building miznd and mizn-ui..."
+export PATH="${SUDO_USER:+$(getent passwd "$SUDO_USER" | cut -d: -f6)/.cargo/bin}:$PATH"
 
-if [[ -f "$BINARY_PATH" ]]; then
-    info "Setting capabilities on eBPF binary..."
-    sudo setcap cap_sys_admin,cap_net_admin,cap_bpf+ep "$BINARY_PATH" || warn "Failed to set capabilities; ensure libcap2-bin is installed."
+clear
+echo "==================================================="
+echo "              MIZN INTRUSION DETECTION             "
+echo "==================================================="
+
+echo "[*] Building workspace..."
+sudo -u "$SUDO_USER" cargo build --workspace
+
+echo "[*] Checking core daemon status..."
+if pgrep -x "miznd" > /dev/null; then
+    echo "[+] MIZN Daemon is already running."
+else
+    echo "[*] Starting MIZN Daemon in the background..."
+    ./target/debug/miznd &
+    DAEMON_PID=$!
+    echo "[+] Daemon started with PID $DAEMON_PID."
 fi
-cargo build --bin miznd --bin mizn-ui
 
-[[ -S "$SOCKET" ]] && rm -f "$SOCKET"
+sleep 1
 
-info "Starting miznd..."
-./target/debug/miznd &
-DAEMON_PID=$!
+show_menu() {
+    echo ""
+    echo "Choose your interface:"
+    echo "  1)  Launch TUI (Terminal Interface)"
+    echo "  2)  Launch Native Rust GUI (Desktop)"
+    echo "  3)  Stop Daemon and Exit"
+    echo ""
+}
 
-
-trap 'info "Shutting down..."; kill "$DAEMON_PID" 2>/dev/null; rm -f "$SOCKET"' EXIT INT TERM
-
-info "Waiting for $SOCKET..."
-for i in $(seq 1 20); do
-    [[ -S "$SOCKET" ]] && break
-    sleep 0.5
-    if ! kill -0 "$DAEMON_PID" 2>/dev/null; then
-        error "miznd exited unexpectedly. Check output above."
-    fi
+while true; do
+    show_menu
+    read -p "Select [1-3]: " choice
+    case $choice in
+        1)
+            echo "[*] Launching Terminal UI..."
+            sleep 1
+            ./mizn_view.sh
+            ;;
+        2)
+            echo "[*] Launching Native Rust GUI..."
+            if [ -d "$GUI_DIR" ]; then
+                cd "$GUI_DIR"
+                sudo -u "$SUDO_USER" cargo run
+                cd ..
+            else
+                echo " GUI directory '$GUI_DIR' not found."
+            fi
+            ;;
+        3)
+            echo "[*] Shutting down MIZN daemon..."
+            killall miznd 2>/dev/null
+            echo "[+] Shutdown complete."
+            exit 0
+            ;;
+        *)
+            echo "Invalid choice. Please select 1, 2, or 3."
+            ;;
+    esac
 done
-
-[[ -S "$SOCKET" ]] || error "Socket never appeared after 10 s."
-info "Daemon ready (PID $DAEMON_PID)."
-
-info "Launching mizn-ui..."
-./target/debug/mizn-ui

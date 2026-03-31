@@ -49,17 +49,11 @@ pub fn refresh_sockets_map() -> SocketsMap {
 
             if let Ok(process_file_descriptors) = process_descriptor.fd() {
                 for file_descriptor_entry in process_file_descriptors.flatten() {
-                    if let FDTarget::Socket(socket_inode_identifier) = file_descriptor_entry.target
-                    {
-                        if let Some(&bound_local_port) =
-                            active_inode_to_local_port_registry.get(&socket_inode_identifier)
-                        {
+                    if let FDTarget::Socket(socket_inode_identifier) = file_descriptor_entry.target {
+                        if let Some(&bound_local_port) = active_inode_to_local_port_registry.get(&socket_inode_identifier) {
                             if resolved_process_nomenclature.is_none() {
                                 resolved_process_nomenclature = Some(
-                                    process_descriptor
-                                        .stat()
-                                        .ok()
-                                        .map(|stat_metrics| stat_metrics.comm)
+                                    process_descriptor.stat().ok().map(|stat_metrics| stat_metrics.comm)
                                         .unwrap_or_else(|| String::from("unresolved_process")),
                                 );
                             }

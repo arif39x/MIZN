@@ -50,12 +50,14 @@ pub fn render(ui: &mut egui::Ui, state: &AppState) {
     let rx_line = Line::new(PlotPoints::new(rx_points))
         .name("Download (RX)")
         .fill(0.0)
-        .color(egui::Color32::from_rgb(100, 200, 255));
+        .width(2.0)
+        .color(egui::Color32::from_rgba_premultiplied(0, 255, 180, 200));
 
     let tx_line = Line::new(PlotPoints::new(tx_points))
         .name("Upload (TX)")
         .fill(0.0)
-        .color(egui::Color32::from_rgb(255, 100, 100));
+        .width(2.0)
+        .color(egui::Color32::from_rgba_premultiplied(255, 0, 150, 200));
 
     Plot::new("GlobalThroughput")
         .legend(Legend::default())

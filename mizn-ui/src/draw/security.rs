@@ -14,10 +14,10 @@ pub fn draw_security_panel(f: &mut Frame, app: &AppState, area: Rect) {
         .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
         .split(area);
 
-    let alert_items: Vec<ListItem> = if app.alerts.is_empty() {
+    let alert_items: Vec<ListItem> = if app.telemetry.recent_alerts.is_empty() {
         vec![ListItem::new(Span::styled("    No anomalies detected", Style::default().fg(C_DIM)))]
     } else {
-        app.alerts.iter().rev().take(halves[0].height.saturating_sub(3) as usize).map(|msg| {
+        app.telemetry.recent_alerts.iter().rev().take(halves[0].height.saturating_sub(2) as usize).map(|msg| {
             ListItem::new(Span::styled(format!("  {}", msg), Style::default().fg(C_ALERT)))
         }).collect()
     };
@@ -25,12 +25,13 @@ pub fn draw_security_panel(f: &mut Frame, app: &AppState, area: Rect) {
     let alert_list = List::new(alert_items)
         .block(
             Block::default()
-                .title(Span::styled("   ACTIVE ALERTS ", Style::default().fg(C_ALERT).add_modifier(Modifier::BOLD)))
+                .title(Span::styled("   THREAT LOG ", Style::default().fg(C_ALERT).add_modifier(Modifier::BOLD)))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(C_BORDER)),
         );
     f.render_widget(alert_list, halves[0]);
+
 
     let blocked_items: Vec<ListItem> = if app.blocked_ips.is_empty() {
         vec![ListItem::new(Span::styled("    No blocked IPs — press [B] to drop top host", Style::default().fg(C_DIM)))]

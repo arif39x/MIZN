@@ -9,27 +9,42 @@ mod security;
 pub fn draw(f: &mut Frame, app: &AppState) {
     let area = f.area();
 
-    let root = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(4),
-            Constraint::Length(10),
-            Constraint::Min(8),
-            Constraint::Length(3),
-        ])
-        .split(area);
+    match app.view_mode {
+        crate::app::ViewMode::Default => {
+            let root = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(4), Constraint::Min(10), Constraint::Percentage(20), Constraint::Length(3)])
+                .split(area);
+            header::draw_header(f, app, root[0]);
+            let middle = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .split(root[1]);
+            graph::draw_throughput_graph(f, app, middle[0]);
+            table::draw_process_table(f, app, middle[1]);
+            security::draw_security_panel(f, app, root[2]);
+            draw_footer(f, root[3]);
+        }
+        crate::app::ViewMode::Table => {
+            let root = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(4), Constraint::Min(10), Constraint::Length(3)])
+                .split(area);
+            header::draw_header(f, app, root[0]);
+            table::draw_process_table(f, app, root[1]);
+            draw_footer(f, root[2]);
+        }
+        crate::app::ViewMode::Graph => {
+            let root = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(4), Constraint::Min(10), Constraint::Length(3)])
+                .split(area);
+            header::draw_header(f, app, root[0]);
+            graph::draw_throughput_graph(f, app, root[1]);
+            draw_footer(f, root[2]);
+        }
+    }
 
-    header::draw_header(f, app, root[0]);
-    graph::draw_throughput_graph(f, app, root[1]);
-
-    let bottom = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
-        .split(root[2]);
-
-    table::draw_process_table(f, app, bottom[0]);
-    security::draw_security_panel(f, app, bottom[1]);
-    draw_footer(f, root[3]);
 }
 
 fn draw_footer(f: &mut ratatui::Frame, area: ratatui::layout::Rect) {

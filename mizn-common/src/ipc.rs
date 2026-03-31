@@ -1,6 +1,7 @@
 use rkyv::{Archive, Deserialize, Serialize};
 use std::collections::HashMap;
 use std::string::String;
+use std::vec::Vec;
 use crate::bpf::FlowMetrics;
 
 #[derive(Archive, Deserialize, Serialize, Debug, Clone)]
@@ -20,6 +21,7 @@ pub struct IpcState {
     pub reception_history_ring_buffer: [u64; 60],
     pub history_ring_buffer_cursor: usize,
     pub telemetry_initialization_timestamp_millis: u64,
+    pub recent_alerts: Vec<String>,
 }
 
 impl Default for IpcState {
@@ -35,6 +37,7 @@ impl Default for IpcState {
             reception_history_ring_buffer: [0; 60],
             history_ring_buffer_cursor: 0,
             telemetry_initialization_timestamp_millis: 0,
+            recent_alerts: Vec::with_capacity(32),
         }
     }
 }
@@ -102,5 +105,15 @@ impl IpcState {
         self.transmission_history_ring_buffer[self.history_ring_buffer_cursor] = tx_rate;
         self.reception_history_ring_buffer[self.history_ring_buffer_cursor] = rx_rate;
         self.history_ring_buffer_cursor = (self.history_ring_buffer_cursor + 1) % 60;
+    }
+
+    #[inline(always)]
+    pub fn push_alert(&mut self, alert: String) {
+        if !self.recent_alerts.contains(&alert) {
+            self.recent_alerts.push(alert);
+            if self.recent_alerts.len() > 32 {
+                self.recent_alerts.remove(0);
+            }
+        }
     }
 }

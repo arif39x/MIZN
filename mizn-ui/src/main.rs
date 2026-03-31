@@ -48,10 +48,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => break,
                     KeyCode::Char('b') => app.block_top_ip(),
+                    KeyCode::Char('1') => app.view_mode = app::ViewMode::Default,
+                    KeyCode::Char('2') => app.view_mode = app::ViewMode::Table,
+                    KeyCode::Char('3') => app.view_mode = app::ViewMode::Graph,
+                    KeyCode::Up => app.move_up(),
+                    KeyCode::Down => app.move_down(),
+                    KeyCode::Char('k') | KeyCode::Char('K') => app.kill_selected(),
+                    KeyCode::Char('d') | KeyCode::Char('D') => app.drop_selected(),
                     _ => {}
                 }
             }
         }
+
     }
 
     disable_raw_mode()?;

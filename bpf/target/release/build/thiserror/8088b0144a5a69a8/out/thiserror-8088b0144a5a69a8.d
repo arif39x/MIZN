@@ -1,0 +1,15 @@
+/home/oxide/Desktop/mizn/bpf/target/release/build/thiserror/8088b0144a5a69a8/out/thiserror-8088b0144a5a69a8.d: /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/provide.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs /home/oxide/Desktop/mizn/bpf/target/release/build/thiserror/48509e9a9a35f70b/out/private.rs
+
+/home/oxide/Desktop/mizn/bpf/target/release/build/thiserror/8088b0144a5a69a8/out/libthiserror-8088b0144a5a69a8.rlib: /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/provide.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs /home/oxide/Desktop/mizn/bpf/target/release/build/thiserror/48509e9a9a35f70b/out/private.rs
+
+/home/oxide/Desktop/mizn/bpf/target/release/build/thiserror/8088b0144a5a69a8/out/libthiserror-8088b0144a5a69a8.rmeta: /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/provide.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs /home/oxide/Desktop/mizn/bpf/target/release/build/thiserror/48509e9a9a35f70b/out/private.rs
+
+/home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs:
+/home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs:
+/home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs:
+/home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/provide.rs:
+/home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs:
+/home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs:
+/home/oxide/Desktop/mizn/bpf/target/release/build/thiserror/48509e9a9a35f70b/out/private.rs:
+
+# env-dep:OUT_DIR=/home/oxide/Desktop/mizn/bpf/target/release/build/thiserror/48509e9a9a35f70b/out

@@ -4,7 +4,11 @@ use std::string::String;
 use std::vec::Vec;
 use crate::bpf::FlowMetrics;
 
+/// Maximum serialized command frame accepted by the command socket.
+pub const IPC_COMMAND_MAX_FRAME_SIZE: usize = 64 * 1024;
+
 #[derive(Archive, Deserialize, Serialize, Debug, Clone)]
+#[archive(check_bytes)]
 pub enum IpcCommand {
     BlockIp(u32),
 }

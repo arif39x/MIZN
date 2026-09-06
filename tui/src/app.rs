@@ -117,6 +117,7 @@ impl AppState {
             };
 
             if len > 0 {
+                let _ = sock.write_all(&(len as u32).to_be_bytes());
                 let _ = sock.write_all(&buf[..len]);
             }
         }

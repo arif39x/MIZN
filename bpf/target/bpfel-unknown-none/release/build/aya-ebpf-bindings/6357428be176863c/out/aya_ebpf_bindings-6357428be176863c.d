@@ -1,0 +1,11 @@
+/home/oxide/Desktop/mizn/bpf/target/bpfel-unknown-none/release/build/aya-ebpf-bindings/6357428be176863c/out/aya_ebpf_bindings-6357428be176863c.d: /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aya-ebpf-bindings-0.1.2/src/lib.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aya-ebpf-bindings-0.1.2/src/x86_64/bindings.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aya-ebpf-bindings-0.1.2/src/x86_64/helpers.rs
+
+/home/oxide/Desktop/mizn/bpf/target/bpfel-unknown-none/release/build/aya-ebpf-bindings/6357428be176863c/out/libaya_ebpf_bindings-6357428be176863c.rlib: /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aya-ebpf-bindings-0.1.2/src/lib.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aya-ebpf-bindings-0.1.2/src/x86_64/bindings.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aya-ebpf-bindings-0.1.2/src/x86_64/helpers.rs
+
+/home/oxide/Desktop/mizn/bpf/target/bpfel-unknown-none/release/build/aya-ebpf-bindings/6357428be176863c/out/aya_ebpf_bindings-6357428be176863c.ll: /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aya-ebpf-bindings-0.1.2/src/lib.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aya-ebpf-bindings-0.1.2/src/x86_64/bindings.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aya-ebpf-bindings-0.1.2/src/x86_64/helpers.rs
+
+/home/oxide/Desktop/mizn/bpf/target/bpfel-unknown-none/release/build/aya-ebpf-bindings/6357428be176863c/out/libaya_ebpf_bindings-6357428be176863c.rmeta: /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aya-ebpf-bindings-0.1.2/src/lib.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aya-ebpf-bindings-0.1.2/src/x86_64/bindings.rs /home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aya-ebpf-bindings-0.1.2/src/x86_64/helpers.rs
+
+/home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aya-ebpf-bindings-0.1.2/src/lib.rs:
+/home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aya-ebpf-bindings-0.1.2/src/x86_64/bindings.rs:
+/home/oxide/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aya-ebpf-bindings-0.1.2/src/x86_64/helpers.rs:

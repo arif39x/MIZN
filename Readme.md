@@ -45,3 +45,12 @@ To use MIZN, you will need to run it with administrative privileges because it i
    `sudo ./run.sh`
 
 This will guide you through starting the background monitor and opening the visual dashboard.
+
+## Keep Secrets Out of Git
+
+Never commit passwords, API keys, access tokens, private keys, certificates, database credentials, or other sensitive information to this repository. This also includes local telemetry databases, packet captures, and configuration files that may contain private network data.
+
+- Store local secrets in environment variables or local configuration files such as `.env` files. Do not add real values to examples; use placeholders instead.
+- Review `git status` and `git diff --cached` before every commit. Make sure no secret or sensitive data is staged.
+- The repository ignores common secret and local-data patterns, but `.gitignore` does not protect a file that is already tracked. Remove sensitive files from Git tracking before committing them.
+- If a secret is accidentally committed, revoke or rotate it immediately, then remove it from the repository history and notify the project maintainers. Deleting the file in a later commit is not sufficient.

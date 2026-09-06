@@ -1,12 +1,11 @@
 [workspace]
 members = [
-    "mizn-common",
-    "miznd",
-    "mizn-ui",
-    "xtask",
-    "mizn-gui",
+    "lib",
+    "daemon",
+    "tui",
+    "tools",
 ]
-exclude = ["mizn-ebpf"]
+exclude = ["bpf"]
 resolver = "2"
 
 [profile.dev]

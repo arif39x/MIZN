@@ -1,11 +1,13 @@
+use crate::bpf::FlowMetrics;
 use rkyv::{Archive, Deserialize, Serialize};
 use std::collections::HashMap;
 use std::string::String;
 use std::vec::Vec;
-use crate::bpf::FlowMetrics;
 
 /// Maximum serialized command frame accepted by the command socket.
 pub const IPC_COMMAND_MAX_FRAME_SIZE: usize = 64 * 1024;
+/// Maximum serialized telemetry state frame accepted by the TUI.
+pub const IPC_STATE_MAX_FRAME_SIZE: usize = 1024 * 1024;
 
 #[derive(Archive, Deserialize, Serialize, Debug, Clone)]
 #[archive(check_bytes)]
@@ -14,6 +16,7 @@ pub enum IpcCommand {
 }
 
 #[derive(Archive, Deserialize, Serialize, Debug, Clone)]
+#[archive(check_bytes)]
 pub struct IpcState {
     pub active_process_telemetry: HashMap<i32, IpcProcessMetrics>,
     pub aggregate_cumulative_bytes_transmitted: u64,
@@ -47,6 +50,7 @@ impl Default for IpcState {
 }
 
 #[derive(Archive, Deserialize, Serialize, Debug, Clone)]
+#[archive(check_bytes)]
 pub struct IpcProcessMetrics {
     pub process_identifier: i32,
     pub process_nomenclature: String,

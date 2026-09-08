@@ -62,6 +62,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bpf"
+version = "0.1.0"
+dependencies = [
+ "aya-ebpf",
+ "mizn-common",
+]
+
+[[package]]
 name = "bytemuck"
 version = "1.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -131,14 +139,6 @@ name = "mizn-common"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
-]
-
-[[package]]
-name = "mizn-ebpf"
-version = "0.1.0"
-dependencies = [
- "aya-ebpf",
- "mizn-common",
 ]
 
 [[package]]

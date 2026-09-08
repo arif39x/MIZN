@@ -13,7 +13,9 @@ pub unsafe fn parse_ipv4(ctx: &XdpContext, ip_offset: usize, depth: u8) -> Resul
 
     let ip: *const Ipv4Header = ptr_at(ctx, ip_offset)?;
 
-    if BLOCKLIST.get(&(*ip).source_address).is_some() {
+    if BLOCKLIST.get(&(*ip).source_address).is_some()
+        || BLOCKLIST.get(&(*ip).destination_address).is_some()
+    {
         return Ok(xdp_action::XDP_DROP);
     }
 

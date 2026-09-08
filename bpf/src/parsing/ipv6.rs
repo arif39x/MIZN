@@ -14,7 +14,9 @@ pub unsafe fn parse_ipv6(ctx: &XdpContext, ip_offset: usize, depth: u8) -> Resul
 
     let ip6: *const Ipv6Header = ptr_at(ctx, ip_offset)?;
 
-    if BLOCKLIST_V6.get(&(*ip6).source_address).is_some() {
+    if BLOCKLIST_V6.get(&(*ip6).source_address).is_some()
+        || BLOCKLIST_V6.get(&(*ip6).destination_address).is_some()
+    {
         return Ok(xdp_action::XDP_DROP);
     }
 
